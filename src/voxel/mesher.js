@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import { hash2 } from '../gen/noise.js';
-import { MAT, terrainColor, seafloorColor, grassTint } from '../gen/palette.js';
+import { MAT, terrainColor, seafloorColor, grassTint, mixRgb, CHANNEL_WATER } from '../gen/palette.js';
 
 export function buildIslandMesh(vol, seed) {
   const { res, cellSize, vstep, half } = vol;
@@ -33,6 +33,8 @@ export function buildIslandMesh(vol, seed) {
     if (m === MAT.SEAFLOOR) {
       const depthFrac = (seaLevel - y) / Math.max(1, floorDepth);
       c = seafloorColor(depthFrac + g * 0.4);
+      // SCAFFOLD: flooded gully/valley/delta → shimmery cyan vs deep ocean.
+      if (vol.channel && vol.channel[idx]) c = mixRgb(c, CHANNEL_WATER, 0.55 + g);
     } else if (m === MAT.SAND) {
       const wet = Math.max(0, Math.min(1, (y - seaLevel) / 6)); // wet (dark) → dry (light)
       c = terrainColor(MAT.SAND, 0.25 + wet * 0.6 + g);

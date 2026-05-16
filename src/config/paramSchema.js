@@ -46,11 +46,14 @@ export const schema = {
     blurb: 'bounded voxel island — mask + domain-warp + ridged multifractal',
     fields: {
       radius: { type: 'float', label: 'Radius', min: 300, max: 1100, step: 10, default: 700, unit: 'm', hint: 'island size — bigger = more room for beaches/relief' },
+      shape: { type: 'int', label: 'Shape', min: 0, max: 4, step: 1, default: 0, hint: '0 auto (from seed) · 1 round · 2 crescent · 3 long · 4 lobed' },
       lowland: { type: 'float', label: 'Lowland relief', min: 6, max: 90, step: 2, default: 32, unit: 'm', hint: 'rolling-hill amplitude of the bulk of the island' },
       massif: { type: 'float', label: 'Massif height', min: 0, max: 360, step: 10, default: 150, unit: 'm', hint: 'localized mountain uplift above the lowland' },
       warp: { type: 'float', label: 'Domain warp', min: 0, max: 2, step: 0.05, default: 0.85 },
       ridge: { type: 'float', label: 'Ridge weight', min: 0, max: 1.5, step: 0.05, default: 0.7, hint: 'ridged multifractal — sharp spines' },
       beachWidth: { type: 'float', label: 'Beach width', min: 2, max: 50, step: 1, default: 16, unit: 'm' },
+      valleyDepth: { type: 'float', label: 'Valley carve', min: 0, max: 120, step: 5, default: 55, unit: 'm', hint: 'gully → river → delta cut (post-build subtraction) · 0 = off' },
+      valleyWidth: { type: 'float', label: 'Valley width', min: 8, max: 60, step: 2, default: 22, unit: 'm', hint: 'channel half-width near source · widens downstream' },
     },
   },
 

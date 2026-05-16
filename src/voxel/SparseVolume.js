@@ -18,6 +18,7 @@ export class SparseVolume {
     this.material = new Uint8Array(n);    // MAT.* enum
     this.season = new Uint8Array(n);      // 0 summer 1 autumn 2 conifer 3 winter
     this.land = new Uint8Array(n);        // 1 if surface is above sea level
+    this.channel = new Uint8Array(n);     // 0 none · 1 gully/valley/delta core
   }
 
   idx(i, j) { return j * this.res + i; }

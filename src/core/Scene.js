@@ -95,6 +95,7 @@ export class Scene {
     const opts = {
       seed: s.get('voxel.seed') | 0,
       radius: s.get('island.radius'),
+      shape: s.get('island.shape') | 0,
       resolution: s.get('voxel.resolution') | 0,
       lowland: s.get('island.lowland'),
       massif: s.get('island.massif'),
@@ -102,6 +103,8 @@ export class Scene {
       warp: s.get('island.warp'),
       ridge: s.get('island.ridge'),
       beachWidth: s.get('island.beachWidth'),
+      valleyDepth: s.get('island.valleyDepth'),
+      valleyWidth: s.get('island.valleyWidth'),
       seaLevel: s.get('water.seaLevel'),
       floorDepth: s.get('water.floorDepth'),
       seasons: {

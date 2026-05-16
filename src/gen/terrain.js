@@ -14,8 +14,8 @@ import { makeSeasonField, SEASON } from './seasons.js';
 
 export function generateIsland(opts) {
   const {
-    seed, radius, resolution, lowland, massif, terraceStep, warp, ridge, beachWidth,
-    seaLevel, floorDepth, seasons,
+    seed, radius, shape, resolution, lowland, massif, terraceStep, warp, ridge,
+    beachWidth, valleyDepth, valleyWidth, seaLevel, floorDepth, seasons,
   } = opts;
 
   // Decoupled relief: `lowland` is the rolling-hill amplitude of the bulk of
@@ -36,16 +36,46 @@ export function generateIsland(opts) {
   // cell and its neighbours so we can estimate slope by finite difference.
   const fScale = 0.0015;
 
+  // ---- island-shape archetype --------------------------------------------
+  // shape: 0 auto (seed-picked → reseeds already diversify) · 1 round ·
+  // 2 crescent · 3 long · 4 lobed. All seed-randomised in orientation so two
+  // "long" islands still differ.
+  const srng = mulberry32((seed * 2654435761) >>> 0);
+  const SH = (shape >= 1 && shape <= 4)
+    ? shape
+    : 1 + Math.floor(mulberry32((seed * 40503) >>> 0)() * 4);
+  const shRot = srng() * Math.PI * 2;
+  const cRot = Math.cos(shRot), sRot = Math.sin(shRot);
+  const elong = 1.55 + srng() * 0.55;             // long: stretch factor
+  const lobeK = 3 + Math.floor(srng() * 3);       // lobed: 3..5 peninsulas
+  const lobePhase = srng() * Math.PI * 2;
+  const lobeAmp = 0.17 + srng() * 0.10;
+  const bayAng = srng() * Math.PI * 2;            // crescent: bay direction
+  const bayDist = radius * (0.52 + srng() * 0.18);
+  const bayR = radius * (0.50 + srng() * 0.22);
+  const bx = Math.cos(bayAng) * bayDist, bz = Math.sin(bayAng) * bayDist;
+
   // Irregular coastline mask: one connected landmass, but with real bays,
-  // headlands and a peninsula or two — not a circle. Low-frequency so the
-  // mass stays connected; higher amplitude than before for shape interest.
+  // headlands and a peninsula or two — modulated by the archetype. >0.5 land,
+  // 0.5 = waterline. Low-frequency so the mass stays connected.
   function coast(x, z) {
-    const r = Math.hypot(x, z);
+    const lx = x * cRot - z * sRot;               // shape-local frame
+    const lz = x * sRot + z * cRot;
+    const rr = SH === 3 ? Math.hypot(lx / elong, lz) : Math.hypot(lx, lz);
     const wob = fbm2(x * 0.0010 + 4.2, z * 0.0010 - 7.8, { seed: seed + 5, octaves: 4, warp: 0.55 });
     const lobes = fbm2(x * 0.0026 - 2.1, z * 0.0026 + 5.4, { seed: seed + 23, octaves: 3, warp: 0.4 }) - 0.5;
-    const effR = radius * (0.74 + 0.46 * (wob - 0.5) + 0.16 * lobes);
+    let effR = radius * (0.74 + 0.46 * (wob - 0.5) + 0.16 * lobes);
+    if (SH === 4) {                               // angular radius lobing
+      const ang = Math.atan2(lz, lx);
+      effR *= 1 + lobeAmp * Math.cos(lobeK * ang + lobePhase + (wob - 0.5) * 1.5);
+    }
     // Wide transition band so land can emerge gradually → room for long beaches.
-    return 1 - smooth01(0.45, 1.04, r / Math.max(1, effR));
+    let land = 1 - smooth01(0.45, 1.04, rr / Math.max(1, effR));
+    if (SH === 2) {                               // carve a bay → C-shape
+      const bd = Math.hypot(x - bx, z - bz);
+      land *= smooth01(bayR * 0.45, bayR * 1.0, bd);
+    }
+    return land;
   }
 
   // Shore profile: 0 = sea-cliff stretch, 1 = gentle long-beach stretch.
@@ -105,6 +135,73 @@ export function generateIsland(opts) {
     return m;
   }
 
+  // ---- carved valley / gully + river delta -------------------------------
+  // A seeded meandering channel from the massif out to the coast, SUBTRACTED
+  // from the already-built surface (post-build carve) so its banks pick up
+  // slope→rock automatically and, near the mouth, the floor dips below sea
+  // level → the Sea floods it into a river delta.
+  const hasChannel = valleyDepth > 0;
+  const channelPaths = [];
+  if (hasChannel) {
+    const crng = mulberry32(((seed * 2246822519) >>> 0) ^ 0x9e3779b1);
+    const p0 = peaks[0] || { cx: 0, cz: 0 };
+    const Sx = p0.cx * 0.6 + (crng() - 0.5) * radius * 0.12;
+    const Sz = p0.cz * 0.6 + (crng() - 0.5) * radius * 0.12;
+    const baseAng = Math.atan2(Sz, Sx) + (crng() - 0.5) * 1.6;   // flow outward
+    const dirx = Math.cos(baseAng), dirz = Math.sin(baseAng);
+    const perpx = -dirz, perpz = dirx;
+    const reach = radius * 1.20;
+    const NS = 48;
+    const main = [];
+    for (let s = 0; s <= NS; s++) {
+      const t = s / NS;
+      const along = t * reach;
+      const meander = (fbm2(t * 2.6 + 11.3, 7.7, { seed: seed + 201, octaves: 3 }) - 0.5)
+        * radius * 0.55 * (0.2 + t);
+      main.push({ x: Sx + dirx * along + perpx * meander,
+                  z: Sz + dirz * along + perpz * meander, t });
+    }
+    channelPaths.push(main);
+    // Delta: two distributary branches diverging near the mouth.
+    const apex = main[Math.floor(NS * 0.80)];
+    for (const sgn of [-1, 1]) {
+      const bAng = baseAng + sgn * (0.34 + crng() * 0.26);
+      const bdx = Math.cos(bAng), bdz = Math.sin(bAng);
+      const blen = radius * 0.55;
+      const br = [];
+      for (let s = 0; s <= 16; s++) {
+        const u = s / 16;
+        br.push({ x: apex.x + bdx * u * blen, z: apex.z + bdz * u * blen,
+                  t: 0.80 + 0.20 * u });
+      }
+      channelPaths.push(br);
+    }
+  }
+
+  // Nearest-path Gaussian bell + its downstream param. Half-width grows
+  // downstream and flares at the delta.
+  function channelAt(x, z) {
+    let best = 0, bt = 0;
+    for (const pth of channelPaths) {
+      for (let k = 0; k < pth.length; k++) {
+        const p = pth[k];
+        const dx = x - p.x, dz = z - p.z;
+        const hw = valleyWidth * (0.5 + 1.7 * p.t)
+          + (p.t > 0.78 ? valleyWidth * 2.4 * (p.t - 0.78) / 0.22 : 0);
+        const f = Math.exp(-(dx * dx + dz * dz) / (hw * hw));
+        if (f > best) { best = f; bt = p.t; }
+      }
+    }
+    return { field: best, t: bt };
+  }
+  function channelCarve(x, z) {
+    if (!hasChannel) return 0;
+    const { field, t } = channelAt(x, z);
+    if (field < 0.02) return 0;
+    const prof = 0.32 + 0.68 * smooth01(0.0, 0.42, t);   // shallow source → deep valley
+    return valleyDepth * prof * field;
+  }
+
   function surfaceAt(x, z) {
     const c = coast(x, z);
     if (c > 0.5) {
@@ -131,7 +228,10 @@ export function generateIsland(opts) {
       const aprT = Math.min(1, lf / apron);
       const aprH = smooth01(0, 1, aprT) * (beachWidth * lerp(0.35, 0.9, st));
       const beyond = smooth01(apron, Math.min(0.98, apron + 0.5), lf);
-      return seaLevel + 0.5 + aprH + beyond * relief;
+      const surf = seaLevel + 0.5 + aprH + beyond * relief;
+      // Post-build carve: a notch in the highlands, dipping below sea level
+      // near the mouth so the delta floods.
+      return surf - channelCarve(x, z);
     }
     const seaFrac = (0.5 - c) * 2;                     // 0 at coast → 1 open sea
     const ripple = (fbm2(x * 0.01, z * 0.01, { seed: seed + 90, octaves: 3 }) - 0.5) * 4;
@@ -155,6 +255,9 @@ export function generateIsland(opts) {
 
       const isLand = h > seaLevel - 0.35;
       vol.land[idx] = isLand ? 1 : 0;
+      // Mark the gully/valley/delta core so the mesher can shimmer-cyan the
+      // flooded stretch against the deeper-blue open ocean.
+      vol.channel[idx] = (hasChannel && channelAt(x, z).field > 0.30) ? 1 : 0;
       const st = shoreType(x, z);
 
       // Material is DECOUPLED from season — driven by slope / height / shore.

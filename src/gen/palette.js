@@ -36,9 +36,14 @@ const GRAD = {
   [MAT.AUTUMN]:      [hx('#b5601f'), hx('#e8a52e')],   // warmer, more saturated
 };
 
-const SEAFLOOR_DEEP = hx('#073a52');
+const SEAFLOOR_DEEP = hx('#05293c');   // darker deep-blue open ocean
 const SEAFLOOR_MID = hx('#137a8c');
 const SEAFLOOR_SHALLOW = hx('#2fd9c8');
+
+// Scaffold: flooded gully/valley/delta water reads brighter & shimmery-cyan
+// vs the deep-blue open ocean. (Full per-region water-surface shimmer is a
+// Sea-shader TODO — the Sea is a single disc; see Sea.js.)
+export const CHANNEL_WATER = hx('#3debe0');
 
 // Terrain face colour. `t` is normalized fill 0..1 (low band → high band).
 export function terrainColor(matId, t) {

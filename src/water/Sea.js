@@ -97,6 +97,14 @@ export class Sea {
     this.floor.renderOrder = 1;
     this.group.add(this.floor);
 
+    // SCAFFOLD (water differentiation): the seabed already reads dark deep
+    // blue in the open ocean and shimmer-cyan in the flooded gully/delta
+    // (mesher uses vol.channel). The matching shimmer on the WATER SURFACE
+    // itself is the remaining piece: the Sea is a single disc, so it needs a
+    // channel-mask sampled here (a low-res R8 texture baked from vol.channel,
+    // sampled by world-XZ → lerp surface colour toward a brighter cyan +
+    // animate a faint shimmer). Hook left intentionally; not wired this pass.
+
     // Translucent surface; its outer ring fades (colour → live sky-horizon,
     // alpha → 0) so the ocean dissolves into the ACTUAL sunset every frame
     // regardless of brightness — not a fixed edge tint.

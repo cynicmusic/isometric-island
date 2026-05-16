@@ -1,0 +1,247 @@
+import './styles.css';
+import './ui/panel.css';
+import { Scene } from './core/Scene.js';
+import { ParamStore } from './state/ParamStore.js';
+import { schema, sectionOrder } from './config/paramSchema.js';
+import { defaultParams } from './config/defaults.js';
+import { ControlPanel } from './ui/ControlPanel.js';
+import { PerfOverlay } from './ui/PerfOverlay.js';
+import { loadSticky, setSticky, clearSticky } from './config/sticky.js';
+import { loadPresets, savePresetToDisk } from './config/presets.js';
+
+const canvasContainer = document.getElementById('canvas-container');
+const uiRoot = document.getElementById('ui-root');
+
+// ---- sticky params ----------------------------------------------------------
+const stickyMap = await loadSticky();           // { path: pinnedValue }
+const stickyPaths = new Set(Object.keys(stickyMap));
+
+function setAt(obj, path, value) {
+  const parts = path.split('.');
+  const last = parts.pop();
+  let n = obj;
+  for (const p of parts) n = (n[p] ??= {});
+  n[last] = value;
+}
+
+// Presets must be available before boot: a reload restores preset 1 (the
+// "default" slot) as the full startup state — every param + camera pose.
+const presets = await loadPresets();
+const bootPreset = presets['1'];
+
+function deepMerge(target, source) {
+  for (const k in source) {
+    const sv = source[k];
+    if (sv && typeof sv === 'object' && !Array.isArray(sv)) {
+      if (target[k] == null || typeof target[k] !== 'object') target[k] = {};
+      deepMerge(target[k], sv);
+    } else {
+      target[k] = Array.isArray(sv) ? sv.slice() : sv;
+    }
+  }
+  return target;
+}
+
+// Base = preset 1 if it exists, else defaults + a fresh random seed (unless
+// seed is sticky). Pinned sticky values are overlaid LAST so a pin still
+// survives reload even when preset 1 is restored.
+const boot = structuredClone(defaultParams);
+if (bootPreset && bootPreset.params) {
+  deepMerge(boot, bootPreset.params);
+} else if (!stickyPaths.has('voxel.seed')) {
+  setAt(boot, 'voxel.seed', 1 + ((Math.random() * 99998) | 0));
+}
+for (const [p, v] of Object.entries(stickyMap)) setAt(boot, p, v);
+
+const store = new ParamStore(boot);
+const scene = new Scene(canvasContainer, store);
+
+// Reload also restores preset 1's camera pose — set after Scene built its
+// default camera, before the render loop starts.
+if (bootPreset && bootPreset.cam) {
+  scene.camera.position.fromArray(bootPreset.cam.p);
+  scene.camera.quaternion.fromArray(bootPreset.cam.q);
+  scene.camera.updateMatrixWorld();
+}
+
+// Keep disk in sync: whenever a sticky param changes, re-pin it.
+store.subscribe((evt) => {
+  if (evt.path && evt.path !== '*' && stickyPaths.has(evt.path)) {
+    stickyMap[evt.path] = evt.value;
+    setSticky(evt.path, evt.value, true);
+  }
+});
+
+const sticky = {
+  has: (p) => stickyPaths.has(p),
+  toggle: (p) => {
+    if (stickyPaths.has(p)) {
+      stickyPaths.delete(p);
+      delete stickyMap[p];
+      setSticky(p, undefined, false);
+    } else {
+      stickyPaths.add(p);
+      const v = store.get(p);
+      stickyMap[p] = v;
+      setSticky(p, v, true);
+    }
+    return stickyPaths.has(p);
+  },
+};
+
+// ---- presets ---------------------------------------------------------------
+// A preset is a FULL snapshot: every param + camera pose. Eight slots.
+// Loading never touches sticky pins (that is the only thing separating
+// "load slot 1" from the "default" button). Slot 1 is also the reload
+// startup state (see boot above).
+
+function capturePreset() {
+  const c = scene.camera;
+  return {
+    params: store.toJSON(),
+    cam: { p: c.position.toArray(), q: c.quaternion.toArray() },
+    t: Date.now(),
+  };
+}
+
+function applyPreset(p) {
+  if (!p || !p.params) return false;
+  store.fromJSON(p.params);                       // notifies '*'
+  scene.regenerate();                             // immediate, supersedes debounce
+  if (p.cam) {
+    scene.camera.position.fromArray(p.cam.p);
+    scene.camera.quaternion.fromArray(p.cam.q);
+    scene.camera.updateMatrixWorld();
+  }
+  return true;
+}
+
+function savePreset(slot) {
+  const p = capturePreset();
+  presets[slot] = p;
+  savePresetToDisk(slot, p);
+  panel.refreshPresets();
+  panel.flashStatus(slot === 1 ? 'saved slot 1 · default' : `saved slot ${slot}`, 'ok');
+}
+
+function loadPreset(slot) {
+  const p = presets[slot];
+  if (!p) { panel.flashStatus(`slot ${slot} empty`, 'err'); return; }
+  applyPreset(p);
+  panel.refreshPresets();
+  panel.flashStatus(`loaded slot ${slot}`, 'ok');
+}
+
+const presetApi = { slots: presets, save: savePreset, load: loadPreset };
+
+const panel = new ControlPanel({ store, schema, sectionOrder, sticky, presets: presetApi, onAction: handleAction });
+uiRoot.appendChild(panel.root);
+
+const perf = new PerfOverlay({ scene });
+uiRoot.appendChild(perf.root);
+
+scene.start();
+
+function handleAction(action) {
+  switch (action) {
+    case 'newisland':
+      // New seed + a little look-magic. Honours stickiness: a pinned seed
+      // makes this a no-op (the pin's whole promise).
+      if (stickyPaths.has('voxel.seed')) {
+        panel.flashStatus('seed is sticky ◆', 'ok');
+      } else {
+        newIsland();
+        panel.flashStatus('new island', 'ok');
+      }
+      break;
+    case 'default':
+      clearSticky();
+      stickyPaths.clear();
+      for (const k of Object.keys(stickyMap)) delete stickyMap[k];
+      store.reset();
+      scene.regenerate();                         // immediate — no delayed fade pop
+      panel.refreshSticky();
+      panel.flashStatus('default · sticky cleared', 'ok');
+      break;
+    case 'factory':
+      // Safety net: a guaranteed hard reset to the built-in defaults, and
+      // restore slot 1 (the default preset) to those values — in case the
+      // user's saved default got clobbered.
+      clearSticky();
+      stickyPaths.clear();
+      for (const k of Object.keys(stickyMap)) delete stickyMap[k];
+      store.reset();
+      scene.regenerate();
+      panel.refreshSticky();
+      presets[1] = capturePreset();
+      savePresetToDisk(1, presets[1]);
+      panel.refreshPresets();
+      panel.flashStatus('factory reset · slot 1 restored', 'ok');
+      break;
+    case 'random':
+      randomize();
+      panel.flashStatus('rolled', 'ok');
+      break;
+    default:
+      console.warn('unknown action', action);
+  }
+}
+
+function rnd(min, max) { return min + Math.random() * (max - min); }
+
+// "new island" — fresh seed plus a lighter-handed reroll than full random:
+// shifts the light, season drift and terrain character so each island feels
+// distinct, but stays in tasteful daylight ranges. Never writes a sticky param.
+function newIsland() {
+  const set = (p, v) => { if (!stickyPaths.has(p)) store.set(p, v); };
+  set('voxel.seed', 1 + ((Math.random() * 99998) | 0));
+  set('sun.elevationDeg', rnd(18, 52));
+  set('sun.azimuthDeg', rnd(-180, 180));
+  set('seasons.sweepDeg', rnd(-180, 180));
+  set('island.warp', rnd(0.65, 1.15));
+  set('island.ridge', rnd(0.5, 0.95));
+  scene.regenerate();                             // immediate, single rebuild
+}
+
+// randomize NEVER writes a sticky param.
+function randomize() {
+  const set = (p, v) => { if (!stickyPaths.has(p)) store.set(p, v); };
+  set('voxel.seed', 1 + ((Math.random() * 99998) | 0));
+  set('sun.elevationDeg', rnd(8, 62));
+  set('sun.azimuthDeg', rnd(-180, 180));
+  set('seasons.sweepDeg', rnd(-180, 180));
+  set('island.warp', rnd(0.5, 1.4));
+  set('island.ridge', rnd(0.4, 1.1));
+  set('island.lowland', rnd(18, 50));
+  set('island.massif', rnd(90, 240));
+  scene.regenerate();                             // immediate, single rebuild
+}
+
+// H/B panel · F fps · R randomize · Esc closes panel (NOT D — D is WASD).
+// A focused range slider must NOT eat these — only ignore real text entry.
+window.addEventListener('keydown', (event) => {
+  if (event.repeat) return;                       // ignore OS key-repeat (was double-randomizing)
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  const t = event.target;
+  const isTextEntry = t && (t.tagName === 'TEXTAREA' ||
+    (t.tagName === 'INPUT' && t.type !== 'range'));
+  if (isTextEntry) return;
+  const k = event.key.toLowerCase();
+  const blur = () => { if (t && t.tagName === 'INPUT' && t.blur) t.blur(); };
+  // Presets: digit 1-8 loads, Shift+digit saves. Use event.code (layout-
+  // independent) so Shift+1 isn't read as "!". Shift is allowed through the
+  // modifier guard above (only meta/ctrl/alt bail).
+  const slotMatch = /^(?:Digit|Numpad)([1-8])$/.exec(event.code);
+  if (slotMatch) {
+    event.preventDefault(); blur();
+    const slot = Number(slotMatch[1]);
+    if (event.shiftKey) savePreset(slot); else loadPreset(slot);
+    return;
+  }
+  if (k === 'h' || k === 'b') { event.preventDefault(); blur(); panel.toggle(); }
+  else if (k === 'escape') { event.preventDefault(); blur(); if (!panel.collapsed) panel.toggle(); }
+  else if (k === 'f') { event.preventDefault(); blur(); perf.toggle(); }
+  else if (k === 'r') { event.preventDefault(); blur(); randomize(); panel.flashStatus('rolled', 'ok'); }
+});
+
+window.isometric = { scene, store, panel, perf, sticky, presets: presetApi };

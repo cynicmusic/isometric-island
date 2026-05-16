@@ -1,0 +1,14 @@
+# dependencies / build output
+node_modules/
+dist/
+
+# test + screenshot artifacts
+artifacts/
+
+# local dev-only state written by the Vite middleware
+sticky.json
+presets.json
+
+# os / editor
+.DS_Store
+*.log

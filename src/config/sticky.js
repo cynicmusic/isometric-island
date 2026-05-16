@@ -7,7 +7,13 @@
 
 const DEFAULT_STICKY = { 'voxel.seed': 1337, 'render.fov': 68 };
 
+// The sticky middleware only exists under the Vite dev server. In a static
+// build (e.g. GitHub Pages) skip the fetch entirely — it would just 404 and
+// spam the console; behaviour is identical (defaults, no persistence).
+const DEV = import.meta.env.DEV;
+
 export async function loadSticky() {
+  if (!DEV) return { ...DEFAULT_STICKY };
   try {
     const r = await fetch('/__iso-sticky');
     if (!r.ok) return { ...DEFAULT_STICKY };
@@ -21,6 +27,7 @@ export async function loadSticky() {
 }
 
 export async function setSticky(path, value, on) {
+  if (!DEV) return;
   try {
     await fetch('/__iso-sticky', {
       method: 'POST',
@@ -31,6 +38,7 @@ export async function setSticky(path, value, on) {
 }
 
 export async function clearSticky() {
+  if (!DEV) return;
   try {
     await fetch('/__iso-sticky/clear', { method: 'POST' });
   } catch { /* ignore */ }

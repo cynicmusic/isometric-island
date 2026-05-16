@@ -5,9 +5,10 @@ dist/
 # test + screenshot artifacts
 artifacts/
 
-# local dev-only state written by the Vite middleware
-sticky.json
-presets.json
+# local dev-only state written by the Vite middleware (repo-root only —
+# public/presets.json is the intentionally-tracked baked deploy snapshot)
+/sticky.json
+/presets.json
 
 # os / editor
 .DS_Store

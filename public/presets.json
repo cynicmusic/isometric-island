@@ -1,0 +1,513 @@
+{
+  "1": {
+    "params": {
+      "sun": {
+        "elevationDeg": 10.133404620809934,
+        "azimuthDeg": -159.589483794465,
+        "intensity": 28.5
+      },
+      "atmosphere": {
+        "rayleighMul": 0.03,
+        "mieBeta": 0.0105,
+        "mieG": 0.025,
+        "ozoneMul": 0
+      },
+      "voxel": {
+        "seed": 14074,
+        "resolution": 736,
+        "terraceStep": 0.5
+      },
+      "island": {
+        "radius": 1070,
+        "shape": 3,
+        "lowland": 21.538229314746044,
+        "massif": 97.66824773411881,
+        "warp": 0.5206552464219077,
+        "ridge": 0.7720145486861713,
+        "beachWidth": 44,
+        "valleyDepth": 55,
+        "valleyWidth": 22
+      },
+      "seasons": {
+        "sweepDeg": -70.80465957984272,
+        "summerEnd": 0.38,
+        "autumnEnd": 0.5,
+        "coniferEnd": 0.79,
+        "borderWarp": 1.15
+      },
+      "water": {
+        "seaLevel": 24.5,
+        "causticScale": 4.6,
+        "causticIntensity": 2.8,
+        "floorDepth": 45,
+        "shoreGlow": 1.1
+      },
+      "render": {
+        "fov": 68,
+        "exposure": 0.3,
+        "fogDensity": 0.0003,
+        "horizonWarp": true
+      }
+    },
+    "cam": {
+      "p": [
+        822.1053682409259,
+        217.052792599938,
+        923.795394600092
+      ],
+      "q": [
+        0.004087420009981611,
+        0.43584481365024624,
+        -0.0019794003090826936,
+        0.9000103740436887
+      ]
+    },
+    "t": 1778916371878
+  },
+  "2": {
+    "params": {
+      "sun": {
+        "elevationDeg": 24.5,
+        "azimuthDeg": -102,
+        "intensity": 28.5
+      },
+      "atmosphere": {
+        "rayleighMul": 0,
+        "mieBeta": 0.036,
+        "mieG": 0.025,
+        "ozoneMul": 3
+      },
+      "voxel": {
+        "seed": 4242,
+        "resolution": 384,
+        "terraceStep": 2.5
+      },
+      "island": {
+        "radius": 1070,
+        "lowland": 32,
+        "massif": 320,
+        "warp": 0.85,
+        "ridge": 0.7,
+        "beachWidth": 16
+      },
+      "seasons": {
+        "sweepDeg": -77,
+        "summerEnd": 0.38,
+        "autumnEnd": 0.5,
+        "coniferEnd": 0.79,
+        "borderWarp": 1.15
+      },
+      "water": {
+        "seaLevel": 9,
+        "causticScale": 1.6,
+        "causticIntensity": 1,
+        "floorDepth": 110,
+        "shoreGlow": 1.1
+      },
+      "render": {
+        "fov": 68,
+        "exposure": 0.3,
+        "fogDensity": 0.0003,
+        "horizonWarp": true
+      }
+    },
+    "cam": {
+      "p": [
+        654.629195571945,
+        141.3984502600367,
+        1030.0348206121557
+      ],
+      "q": [
+        -0.019990588358307134,
+        0.23246982447081835,
+        0.00477917888699861,
+        0.9723864028958661
+      ]
+    },
+    "t": 1778905722505
+  },
+  "3": {
+    "params": {
+      "sun": {
+        "elevationDeg": 24.5,
+        "azimuthDeg": -102,
+        "intensity": 28.5
+      },
+      "atmosphere": {
+        "rayleighMul": 3.23,
+        "mieBeta": 0.038,
+        "mieG": 0.285,
+        "ozoneMul": 1
+      },
+      "voxel": {
+        "seed": 4242,
+        "resolution": 384,
+        "terraceStep": 2.5
+      },
+      "island": {
+        "radius": 700,
+        "lowland": 32,
+        "massif": 150,
+        "warp": 0.85,
+        "ridge": 0.7,
+        "beachWidth": 16
+      },
+      "seasons": {
+        "sweepDeg": -77,
+        "summerEnd": 0.38,
+        "autumnEnd": 0.5,
+        "coniferEnd": 0.79,
+        "borderWarp": 1.15
+      },
+      "water": {
+        "seaLevel": 9,
+        "causticScale": 1.6,
+        "causticIntensity": 1,
+        "floorDepth": 64,
+        "shoreGlow": 0.7
+      },
+      "render": {
+        "fov": 68,
+        "exposure": 1.05,
+        "fogDensity": 0.00072,
+        "horizonWarp": true
+      }
+    },
+    "cam": {
+      "p": [
+        465.3826377808648,
+        215.85230932962034,
+        431.42670475292977
+      ],
+      "q": [
+        -0.1532355862789648,
+        0.4127604570591691,
+        0.0706642339025812,
+        0.8950721905148261
+      ]
+    },
+    "t": 1778904693190
+  },
+  "4": {
+    "params": {
+      "sun": {
+        "elevationDeg": 8,
+        "azimuthDeg": -102,
+        "intensity": 28.5
+      },
+      "atmosphere": {
+        "rayleighMul": 3.23,
+        "mieBeta": 0.038,
+        "mieG": 0.285,
+        "ozoneMul": 1
+      },
+      "voxel": {
+        "seed": 4242,
+        "resolution": 384,
+        "terraceStep": 2.5
+      },
+      "island": {
+        "radius": 1070,
+        "lowland": 32,
+        "massif": 320,
+        "warp": 0.85,
+        "ridge": 0.7,
+        "beachWidth": 16
+      },
+      "seasons": {
+        "sweepDeg": -77,
+        "summerEnd": 0.38,
+        "autumnEnd": 0.5,
+        "coniferEnd": 0.79,
+        "borderWarp": 1.15
+      },
+      "water": {
+        "seaLevel": 9,
+        "causticScale": 1.6,
+        "causticIntensity": 1,
+        "floorDepth": 64,
+        "shoreGlow": 0.7
+      },
+      "render": {
+        "fov": 68,
+        "exposure": 1.05,
+        "fogDensity": 0.00072,
+        "horizonWarp": true
+      }
+    },
+    "cam": {
+      "p": [
+        700,
+        430,
+        700
+      ],
+      "q": [
+        -0.16836126989917563,
+        0.3762755473317552,
+        0.06973752137059568,
+        0.9084095295576827
+      ]
+    },
+    "t": 1778906086348
+  },
+  "5": {
+    "params": {
+      "sun": {
+        "elevationDeg": 15,
+        "azimuthDeg": -40,
+        "intensity": 39.5
+      },
+      "atmosphere": {
+        "rayleighMul": 3.51,
+        "mieBeta": 0.0105,
+        "mieG": 0,
+        "ozoneMul": 0
+      },
+      "voxel": {
+        "seed": 40625,
+        "resolution": 864,
+        "terraceStep": 2.5
+      },
+      "island": {
+        "radius": 1070,
+        "shape": 2,
+        "lowland": 19.38589192301091,
+        "massif": 220,
+        "warp": 0.5558003222115172,
+        "ridge": 1.0011477360550791,
+        "beachWidth": 16,
+        "valleyDepth": 55,
+        "valleyWidth": 22
+      },
+      "seasons": {
+        "sweepDeg": 133.32059125028582,
+        "summerEnd": 0.38,
+        "autumnEnd": 0.5,
+        "coniferEnd": 0.79,
+        "borderWarp": 1.15
+      },
+      "water": {
+        "seaLevel": 24.5,
+        "causticScale": 4.6,
+        "causticIntensity": 2.8,
+        "floorDepth": 45,
+        "shoreGlow": 1.1
+      },
+      "render": {
+        "fov": 68,
+        "exposure": 0.3,
+        "fogDensity": 0.0003,
+        "horizonWarp": true
+      }
+    },
+    "cam": {
+      "p": [
+        665.7316804806973,
+        244.64169572417404,
+        300.4935499361782
+      ],
+      "q": [
+        -0.11188265023145137,
+        0.43246483548198245,
+        0.054180436987058954,
+        0.893040267231338
+      ]
+    },
+    "t": 1778913856933
+  },
+  "6": {
+    "params": {
+      "sun": {
+        "elevationDeg": 10,
+        "azimuthDeg": -145.46248867256884,
+        "intensity": 39.5
+      },
+      "atmosphere": {
+        "rayleighMul": 3.51,
+        "mieBeta": 0.0105,
+        "mieG": 0,
+        "ozoneMul": 0
+      },
+      "voxel": {
+        "seed": 40625,
+        "resolution": 864,
+        "terraceStep": 2.5
+      },
+      "island": {
+        "radius": 1070,
+        "shape": 2,
+        "lowland": 30.989385255106534,
+        "massif": 219.3175720007327,
+        "warp": 0.8935614255270202,
+        "ridge": 0.9231569131975229,
+        "beachWidth": 16,
+        "valleyDepth": 55,
+        "valleyWidth": 22
+      },
+      "seasons": {
+        "sweepDeg": 130.30916118199548,
+        "summerEnd": 0.38,
+        "autumnEnd": 0.5,
+        "coniferEnd": 0.79,
+        "borderWarp": 1.15
+      },
+      "water": {
+        "seaLevel": 24.5,
+        "causticScale": 4.6,
+        "causticIntensity": 2.8,
+        "floorDepth": 45,
+        "shoreGlow": 1.1
+      },
+      "render": {
+        "fov": 68,
+        "exposure": 0.3,
+        "fogDensity": 0.0003,
+        "horizonWarp": true
+      }
+    },
+    "cam": {
+      "p": [
+        -23.406386720998235,
+        231.9012025893953,
+        -182.01580027962913
+      ],
+      "q": [
+        -0.050055803500372545,
+        -0.8612388587282062,
+        -0.0865187430410874,
+        0.49827357129899974
+      ]
+    },
+    "t": 1778914370432
+  },
+  "7": {
+    "params": {
+      "sun": {
+        "elevationDeg": 38.702030171452705,
+        "azimuthDeg": 174.93692260347592,
+        "intensity": 39.5
+      },
+      "atmosphere": {
+        "rayleighMul": 3.51,
+        "mieBeta": 0.0105,
+        "mieG": 0,
+        "ozoneMul": 0
+      },
+      "voxel": {
+        "seed": 40625,
+        "resolution": 864,
+        "terraceStep": 2.5
+      },
+      "island": {
+        "radius": 1070,
+        "shape": 2,
+        "lowland": 24.580242712406683,
+        "massif": 200,
+        "warp": 1.4,
+        "ridge": 0.5625366943366947,
+        "beachWidth": 16,
+        "valleyDepth": 55,
+        "valleyWidth": 22
+      },
+      "seasons": {
+        "sweepDeg": 77.45604080932924,
+        "summerEnd": 0.38,
+        "autumnEnd": 0.5,
+        "coniferEnd": 0.79,
+        "borderWarp": 1.15
+      },
+      "water": {
+        "seaLevel": 24.5,
+        "causticScale": 4.6,
+        "causticIntensity": 2.8,
+        "floorDepth": 45,
+        "shoreGlow": 1.1
+      },
+      "render": {
+        "fov": 68,
+        "exposure": 0.3,
+        "fogDensity": 0.0003,
+        "horizonWarp": true
+      }
+    },
+    "cam": {
+      "p": [
+        173.16525446663283,
+        229.60457555398,
+        459.6799861889153
+      ],
+      "q": [
+        -0.10705604456358878,
+        0.03122919509429997,
+        0.0033642782262623956,
+        0.9937567219033929
+      ]
+    },
+    "t": 1778914228306
+  },
+  "8": {
+    "params": {
+      "sun": {
+        "elevationDeg": 10.133404620809934,
+        "azimuthDeg": -159.589483794465,
+        "intensity": 28.5
+      },
+      "atmosphere": {
+        "rayleighMul": 0.03,
+        "mieBeta": 0.0105,
+        "mieG": 0.025,
+        "ozoneMul": 0
+      },
+      "voxel": {
+        "seed": 14074,
+        "resolution": 736,
+        "terraceStep": 0.5
+      },
+      "island": {
+        "radius": 1070,
+        "shape": 3,
+        "lowland": 21.538229314746044,
+        "massif": 97.66824773411881,
+        "warp": 0.5206552464219077,
+        "ridge": 0.7720145486861713,
+        "beachWidth": 44,
+        "valleyDepth": 55,
+        "valleyWidth": 22
+      },
+      "seasons": {
+        "sweepDeg": -70.80465957984272,
+        "summerEnd": 0.38,
+        "autumnEnd": 0.5,
+        "coniferEnd": 0.79,
+        "borderWarp": 1.15
+      },
+      "water": {
+        "seaLevel": 24.5,
+        "causticScale": 4.6,
+        "causticIntensity": 2.8,
+        "floorDepth": 45,
+        "shoreGlow": 1.1
+      },
+      "render": {
+        "fov": 68,
+        "exposure": 0.3,
+        "fogDensity": 0.0003,
+        "horizonWarp": true
+      }
+    },
+    "cam": {
+      "p": [
+        822.1053682409259,
+        217.052792599938,
+        923.795394600092
+      ],
+      "q": [
+        0.004087420009981611,
+        0.43584481365024624,
+        -0.0019794003090826936,
+        0.9000103740436887
+      ]
+    },
+    "t": 1778915329853
+  }
+}

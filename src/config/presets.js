@@ -15,10 +15,11 @@ export async function loadPresets() {
     }
   } catch { /* no dev server — static build */ }
   // Static build (e.g. GitHub Pages): a baked snapshot shipped in the bundle
-  // at <base>presets.json (raw slot map). Relative URL → resolves under the
-  // Pages project subpath.
+  // next to index.html. Resolve against document.baseURI so it works under
+  // the Pages project subpath regardless of Vite's BASE_URL.
   try {
-    const r = await fetch(`${import.meta.env.BASE_URL || '/'}presets.json`, { cache: 'no-cache' });
+    const url = new URL('presets.json', document.baseURI).href;
+    const r = await fetch(url, { cache: 'no-cache' });
     if (r.ok) {
       const j = await r.json();
       return j && typeof j === 'object' ? (j.presets || j) : {};

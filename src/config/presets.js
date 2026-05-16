@@ -5,14 +5,26 @@
 // from the "default" button (which factory-resets and clears sticky).
 
 export async function loadPresets() {
+  // Dev: the Vite middleware. Always answers (even with {}), so a dev server
+  // never falls through to the baked snapshot.
   try {
     const r = await fetch('/__iso-presets');
-    if (!r.ok) return {};
-    const { presets } = await r.json();
-    return presets || {};
-  } catch {
-    return {};
-  }
+    if (r.ok) {
+      const { presets } = await r.json();
+      return presets || {};
+    }
+  } catch { /* no dev server — static build */ }
+  // Static build (e.g. GitHub Pages): a baked snapshot shipped in the bundle
+  // at <base>presets.json (raw slot map). Relative URL → resolves under the
+  // Pages project subpath.
+  try {
+    const r = await fetch(`${import.meta.env.BASE_URL || '/'}presets.json`, { cache: 'no-cache' });
+    if (r.ok) {
+      const j = await r.json();
+      return j && typeof j === 'object' ? (j.presets || j) : {};
+    }
+  } catch { /* no baked snapshot */ }
+  return {};
 }
 
 export async function savePresetToDisk(slot, preset) {

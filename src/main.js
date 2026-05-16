@@ -42,16 +42,19 @@ function deepMerge(target, source) {
   return target;
 }
 
-// Base = preset 1 if it exists, else defaults + a fresh random seed (unless
-// seed is sticky). Pinned sticky values are overlaid LAST so a pin still
-// survives reload even when preset 1 is restored.
+// Preset 1 is the explicit full-state startup snapshot: when it exists it
+// wins OUTRIGHT, so a reload reproduces it EXACTLY — identical to pressing
+// "1" at runtime (which is store.fromJSON(preset), no sticky). Overlaying
+// sticky here was the bug: the default-sticky voxel.seed/render.fov (and any
+// pin) clobbered the preset's seed/fov → wrong island/zoom on reload only.
+// Sticky still governs the no-preset boot and all runtime pinning.
 const boot = structuredClone(defaultParams);
 if (bootPreset && bootPreset.params) {
   deepMerge(boot, bootPreset.params);
-} else if (!stickyPaths.has('voxel.seed')) {
-  setAt(boot, 'voxel.seed', 1 + ((Math.random() * 99998) | 0));
+} else {
+  if (!stickyPaths.has('voxel.seed')) setAt(boot, 'voxel.seed', 1 + ((Math.random() * 99998) | 0));
+  for (const [p, v] of Object.entries(stickyMap)) setAt(boot, p, v);
 }
-for (const [p, v] of Object.entries(stickyMap)) setAt(boot, p, v);
 
 const store = new ParamStore(boot);
 const scene = new Scene(canvasContainer, store);

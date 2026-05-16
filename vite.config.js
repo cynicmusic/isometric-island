@@ -107,8 +107,11 @@ function stickyPlugin() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [stickyPlugin(), presetsPlugin()],
+  // Relative base for builds so the static bundle works under a GitHub Pages
+  // project subpath (…/isometric-island/). Dev stays at root.
+  base: command === 'build' ? './' : '/',
   // Own dep-optimize cache when the test harness drives an isolated server,
   // so two Vite instances never fight over node_modules/.vite (deadlock).
   cacheDir: process.env.ISO_CACHE_DIR
@@ -119,4 +122,4 @@ export default defineConfig({
     target: 'esnext',
     rollupOptions: { input: { main: path.resolve('index.html') } },
   },
-});
+}));

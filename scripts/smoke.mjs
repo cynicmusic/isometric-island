@@ -141,9 +141,11 @@ const presetCheck = await page.evaluate(() => ({
   liveEl: window.isometric.store.get('sun.elevationDeg'),
 }));
 
-// Reload restores preset 1 (params + camera). Write a sentinel slot 1 with
-// awaited disk persistence, do a REAL page reload, and read back.
+// Reload restores preset 1 (params + camera) EXACTLY — identical to pressing
+// "1". Regression guard: pin a DIFFERENT sticky seed to disk; preset 1 must
+// still win on reload (sticky overlaying the preset was the reload bug).
 await page.evaluate(async () => {
+  window.isometric.store.set('voxel.seed', 24680);   // preset's seed
   window.isometric.store.set('sun.elevationDeg', 41);
   const c = window.isometric.scene.camera;
   c.position.set(123, 234, 345);
@@ -158,15 +160,25 @@ await page.evaluate(async () => {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ slot: 1, preset }),
   });
+  // Persist a CONFLICTING sticky seed (written after the store re-pin so it
+  // sticks). Pre-fix this clobbered the preset on reload.
+  await fetch('/__iso-sticky', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: 'voxel.seed', value: 99999, on: true }),
+  });
 });
 await page.reload({ waitUntil: 'load', timeout: 30000 });
 await page.waitForTimeout(2600);
 const reloadCheck = await page.evaluate(() => ({
   el: window.isometric.store.get('sun.elevationDeg'),
   camX: Math.round(window.isometric.scene.camera.position.x),
+  seed: window.isometric.store.get('voxel.seed'),
 }));
 if (reloadCheck.el !== 41 || reloadCheck.camX !== 123) {
   errors.push(`reload did not restore preset 1: ${JSON.stringify(reloadCheck)} (want el=41 camX=123)`);
+}
+if (reloadCheck.seed !== 24680) {
+  errors.push(`reload: sticky clobbered preset seed — got ${reloadCheck.seed}, want 24680 (sticky was 99999)`);
 }
 
 const debug = await page.evaluate(() => window.isometric?.scene?.getDebugInfo?.() ?? null);

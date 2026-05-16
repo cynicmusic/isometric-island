@@ -4,12 +4,15 @@
 
 import { chromium } from '../../fire-whisp/node_modules/playwright/index.mjs';
 import path from 'node:path';
+import os from 'node:os';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const URL = process.env.URL || 'http://127.0.0.1:5193/';
-const ART = path.resolve(__dirname, '..', 'artifacts');
+// Screenshot goes to a durable location OUTSIDE the repo — raw on the
+// Desktop (override with SHOT_DIR).
+const ART = process.env.SHOT_DIR || path.join(os.homedir(), 'Desktop');
 await fs.mkdir(ART, { recursive: true });
 
 const browser = await chromium.launch({ headless: true });

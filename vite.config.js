@@ -8,7 +8,11 @@ import { defineConfig } from 'vite';
 //   GET  /__iso-sticky            → { sticky: { "island.seed": 1337, ... } }
 //   POST /__iso-sticky            → { path, value, on } : set/clear one pin
 //   POST /__iso-sticky/clear      → wipe all pins (used by "default")
-const STICKY_FILE = path.resolve('sticky.json');
+// Paths are env-overridable so a test harness can point at throwaway files
+// and NEVER touch the user's real saved state.
+const STICKY_FILE = process.env.ISO_STICKY_FILE
+  ? path.resolve(process.env.ISO_STICKY_FILE)
+  : path.resolve('sticky.json');
 
 async function readSticky() {
   try { return JSON.parse(await fs.readFile(STICKY_FILE, 'utf8')); }
@@ -32,7 +36,9 @@ function sendJson(res, status, data) {
 // eight slots. Same on-disk posture as the sticky middleware.
 //   GET  /__iso-presets   → { presets: { "1": {params,cam,t}, ... } }
 //   POST /__iso-presets   → { slot, preset } : save one slot
-const PRESETS_FILE = path.resolve('presets.json');
+const PRESETS_FILE = process.env.ISO_PRESETS_FILE
+  ? path.resolve(process.env.ISO_PRESETS_FILE)
+  : path.resolve('presets.json');
 
 async function readPresets() {
   try { return JSON.parse(await fs.readFile(PRESETS_FILE, 'utf8')); }
@@ -103,6 +109,11 @@ function stickyPlugin() {
 
 export default defineConfig({
   plugins: [stickyPlugin(), presetsPlugin()],
+  // Own dep-optimize cache when the test harness drives an isolated server,
+  // so two Vite instances never fight over node_modules/.vite (deadlock).
+  cacheDir: process.env.ISO_CACHE_DIR
+    ? path.resolve(process.env.ISO_CACHE_DIR)
+    : 'node_modules/.vite',
   server: { host: '127.0.0.1', port: 5193, strictPort: true },
   build: {
     target: 'esnext',

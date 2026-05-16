@@ -1,16 +1,66 @@
 // Smoke + visual harness. Headless Chromium: capture console errors, dump
 // scene debug, screenshot the island from several posed vantages and across
-// param changes (sun, seasons, reseed). Same posture as sunset/scripts/smoke.mjs.
+// param changes (sun, seasons, reseed).
+//
+// HARD RULE: this harness NEVER mutates user state. It boots its OWN Vite
+// dev server, on a separate port, with throwaway sticky/presets files in an
+// OS temp dir (via the ISO_*_FILE env overrides). The user's real
+// presets.json / sticky.json are never even opened. Set URL to point at an
+// external server and skip the spawn (e.g. CI against a static build).
 
 import { chromium } from '../../fire-whisp/node_modules/playwright/index.mjs';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
+import os from 'node:os';
 import fs from 'node:fs/promises';
+import { rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const URL = process.env.URL || 'http://127.0.0.1:5193/';
-const ART = path.resolve(__dirname, '..', 'artifacts');
+const REPO = path.resolve(__dirname, '..');
+// Screenshots go to a durable location OUTSIDE the repo — raw on the Desktop
+// (override with SHOT_DIR). Keeps generated PNGs out of git/working tree.
+const ART = process.env.SHOT_DIR || path.join(os.homedir(), 'Desktop');
 await fs.mkdir(ART, { recursive: true });
+
+// ---- isolated server (throwaway state) ------------------------------------
+let server = null;
+let tmpDir = null;
+let URL = process.env.URL;
+
+function cleanup() {
+  try { if (server && !server.killed) server.kill('SIGTERM'); } catch { /* noop */ }
+  try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); } catch { /* noop */ }
+}
+process.on('exit', cleanup);
+process.on('SIGINT', () => { cleanup(); process.exit(130); });
+process.on('SIGTERM', () => { cleanup(); process.exit(143); });
+
+if (!URL) {
+  const PORT = Number(process.env.SMOKE_PORT) || 5194;
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'iso-smoke-'));
+  const env = {
+    ...process.env,
+    ISO_PRESETS_FILE: path.join(tmpDir, 'presets.json'),
+    ISO_STICKY_FILE: path.join(tmpDir, 'sticky.json'),
+    ISO_CACHE_DIR: path.join(tmpDir, '.vite'),   // private dep cache — no deadlock
+  };
+  const bin = path.join(REPO, 'node_modules', '.bin', 'vite');
+  server = spawn(bin, ['--host', '127.0.0.1', '--port', String(PORT), '--strictPort'],
+    { cwd: REPO, env, stdio: 'ignore' });
+  server.on('error', (e) => { console.error('failed to spawn vite:', e.message); process.exit(1); });
+  server.unref();   // must NOT keep Node's event loop alive, or the script
+                    // can never reach exit/cleanup (deadlock: waiting to exit
+                    // while the child it must kill is what blocks exit)
+  URL = `http://127.0.0.1:${PORT}/`;
+
+  const deadline = Date.now() + 30000;
+  for (;;) {
+    try { if ((await fetch(URL)).ok) break; } catch { /* not up yet */ }
+    if (Date.now() > deadline) throw new Error('isolated vite server did not become ready');
+    await new Promise((r) => setTimeout(r, 300));
+  }
+}
 
 const browser = await chromium.launch({ headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
@@ -26,7 +76,7 @@ page.on('console', (msg) => {
 });
 page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}\n${err.stack || ''}`));
 
-await page.goto(URL, { waitUntil: 'load', timeout: 15000 });
+await page.goto(URL, { waitUntil: 'load', timeout: 60000 }); // cold dep pre-bundle
 await page.waitForTimeout(2600);                 // boot + LUTs + terrain regen
 
 async function pose(px, py, pz, lx, ly, lz) {
@@ -109,7 +159,7 @@ await page.evaluate(async () => {
     body: JSON.stringify({ slot: 1, preset }),
   });
 });
-await page.reload({ waitUntil: 'load', timeout: 15000 });
+await page.reload({ waitUntil: 'load', timeout: 30000 });
 await page.waitForTimeout(2600);
 const reloadCheck = await page.evaluate(() => ({
   el: window.isometric.store.get('sun.elevationDeg'),
@@ -140,4 +190,4 @@ if (errors.length) {
   for (const e of errors) console.log('  ' + e);
   process.exit(1);
 }
-console.log('\nOK — no console errors · artifacts in artifacts/');
+console.log(`\nOK — no console errors · screenshots in ${ART}`);

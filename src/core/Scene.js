@@ -355,11 +355,11 @@ export class Scene {
     wp.copy(this.camera.position).addScaledVector(sd, 2000).project(this.camera);
     const sunUV = { x: wp.x * 0.5 + 0.5, y: wp.y * 0.5 + 0.5 };
     const offscreen = Math.max(0, -sunUV.x, sunUV.x - 1, -sunUV.y, sunUV.y - 1);
-    // Lab god-ray tuning needs the radial march to keep talking when the sun
-    // source slips just outside the viewport. This is an influence fade, not
-    // a strict "solar disc is visible" test.
-    const frontFade = THREE.MathUtils.smoothstep(frontDot, -0.22, 0.08);
-    const edgeFade = 1 - THREE.MathUtils.smoothstep(offscreen, 1.25, 3.25);
+    // God-ray presets can have a dramatic red sky with the actual sun just
+    // off the shoulder/off-frame. Keep the march alive there; only fade out
+    // when the sun is truly behind the camera or far outside the screen.
+    const frontFade = THREE.MathUtils.smoothstep(frontDot, -0.55, -0.05);
+    const edgeFade = 1 - THREE.MathUtils.smoothstep(offscreen, 1.75, 3.75);
     const heightFade = THREE.MathUtils.smoothstep(sd.y, -0.02, 0.04);
     const sunFade = frontFade * edgeFade * heightFade;
     const sunVisible = sunFade > 0.001;

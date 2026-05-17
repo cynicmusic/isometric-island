@@ -26,6 +26,24 @@ export const schema = {
     },
   },
 
+  // Lighting / post. Sky-tinted ambient bounce + analytic water sun-glint
+  // are live (free, in-shader). Bloom + aerial haze are staged behind a
+  // shared offscreen pass (mobile budget — built once, not per-effect).
+  lighting: {
+    label: 'lighting',
+    icon: '✦',
+    blurb: 'sky-tinted bounce · water sun-glint · bloom · aerial haze',
+    fields: {
+      skyBounce: { type: 'float', label: 'Sky bounce', min: 0, max: 1.6, step: 0.02, default: 0.55, hint: 'faked GI — hemisphere fill tinted by the live sky' },
+      bounceTint: { type: 'float', label: 'Bounce tint', min: 0, max: 1, step: 0.02, default: 0.7, hint: 'how hard the bounce pulls toward the sampled sky colour' },
+      groundBounce: { type: 'float', label: 'Ground bounce', min: 0, max: 1, step: 0.02, default: 0.3, hint: 'warm up-light from the lit ground' },
+      sunGlint: { type: 'float', label: 'Sun glint', min: 0, max: 2.5, step: 0.05, default: 0.7, hint: 'analytic specular sun streak on the sea' },
+      glintSpread: { type: 'float', label: 'Glint spread', min: 0.2, max: 4, step: 0.05, default: 1.1, hint: 'lower = tight mirror streak · higher = broad shimmer' },
+      bloom: { type: 'float', label: 'Bloom', min: 0, max: 1.5, step: 0.02, default: 0, hint: 'staged — shared post pass (0 = off, zero cost)' },
+      aerialHaze: { type: 'float', label: 'Aerial haze', min: 0, max: 1, step: 0.02, default: 0, hint: 'staged — sky-coloured depth haze (0 = off)' },
+    },
+  },
+
   // World structure. These are NOT randomized (by design) and use the
   // amber "structural pin" — pinning them is a deliberate, major decision,
   // not the fun lime "roll-friendly" pin.
@@ -65,8 +83,16 @@ export const schema = {
       sweepDeg: { type: 'float', label: 'Region drift', min: -180, max: 180, step: 1, default: 35, unit: '°', hint: 'rotates the lateral-variety noise' },
       summerEnd: { type: 'float', label: 'Summer line', min: 0.15, max: 0.6, step: 0.01, default: 0.44, hint: 'altitude frac · below = tropical lowland' },
       autumnEnd: { type: 'float', label: 'Autumn line', min: 0.4, max: 0.78, step: 0.01, default: 0.66 },
-      coniferEnd: { type: 'float', label: 'Conifer line', min: 0.6, max: 0.92, step: 0.01, default: 0.84, hint: 'above = winter snow caps' },
+      coniferEnd: { type: 'float', label: 'Conifer line', min: 0.6, max: 0.92, step: 0.01, default: 0.84, hint: 'above = winter snow caps (drives the snow line)' },
       borderWarp: { type: 'float', label: 'Border warp', min: 0, max: 1.5, step: 0.05, default: 0.6, hint: 'organic wander of the altitude bands' },
+      craggy: { type: 'float', label: 'Craggy peaks', min: 0, max: 1, step: 0.02, default: 0.4, hint: 'rock speckled through the snow/upper zone' },
+      // "Golf course" look — a brighter-lime fairway/"greens" band where grass
+      // meets the beach, with sparse sand-trap "bunkers". Default OFF so the
+      // big-beach presets (A-1) are byte-identical; opt-in for the B-1 vibe.
+      fairway: { type: 'float', label: 'Fairway (greens)', min: 0, max: 1, step: 0.02, default: 0, hint: '0 = off · lime "greens" band above the beach' },
+      fairwayBand: { type: 'float', label: 'Fairway band', min: 4, max: 80, step: 2, default: 24, unit: 'm', hint: 'how far the greens reach inland from the sand' },
+      bunkerDensity: { type: 'float', label: 'Bunkers', min: 0, max: 1, step: 0.02, default: 0.18, hint: 'sand-trap frequency inside the greens' },
+      bunkerSize: { type: 'float', label: 'Bunker size', min: 3, max: 30, step: 1, default: 11, unit: 'm', hint: 'sand-trap blob radius' },
     },
   },
 
@@ -96,4 +122,4 @@ export const schema = {
   },
 };
 
-export const sectionOrder = ['sun', 'atmosphere', 'voxel', 'island', 'seasons', 'water', 'render'];
+export const sectionOrder = ['sun', 'atmosphere', 'lighting', 'voxel', 'island', 'seasons', 'water', 'render'];

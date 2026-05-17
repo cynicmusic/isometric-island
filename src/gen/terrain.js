@@ -7,7 +7,7 @@
 // Erosion, terracing-as-pass and carved cliffs are Phase 2; the stepped
 // voxel look comes from height quantization in the mesher (vstep).
 
-import { fbm2, ridgedFbm2, mulberry32, lerp } from './noise.js';
+import { fbm2, ridgedFbm2, mulberry32, lerp, valueNoise2 } from './noise.js';
 import { SparseVolume } from '../voxel/SparseVolume.js';
 import { MAT } from './palette.js';
 import { makeSeasonField, SEASON } from './seasons.js';
@@ -292,6 +292,34 @@ export function generateIsland(opts) {
         mat = MAT.DIRT;                                     // scree / talus
       } else {
         mat = MAT.GRASS;                                    // lush — season TINTS this
+      }
+
+      // Craggy peaks: speckle ROCK through the snow zone so caps read rugged,
+      // not a solid dome. valueNoise2 (≈uniform) so the knob maps ~linearly
+      // to the rock fraction; craggy 0 ⇒ untouched.
+      if ((mat === MAT.SNOW || mat === MAT.GRASSY_SNOW) && (seasons.craggy ?? 0) > 0) {
+        const cg = valueNoise2(x * 0.085 + 2.3, z * 0.085 - 4.1, seed + 211);
+        if (cg < seasons.craggy * 0.6) mat = MAT.ROCK;
+      }
+
+      // "Golf course" look — OPT-IN (fairway 0 ⇒ block skipped, so the
+      // big-beach presets like A-1 stay byte-identical). A lime "greens"
+      // band just inland of the sand + sparse sand-trap "bunkers". Only
+      // ever rewrites GRASS on gentle, low ground — never rock/snow/beach.
+      const fw = seasons.fairway ?? 0;
+      if (fw > 0 && mat === MAT.GRASS && slope < 0.42) {
+        // Low apron of grass just inland of the beach (no strict lower edge —
+        // height bands are too seed-dependent to be reliable).
+        const top = seaLevel + beachWidth * 1.25 + (seasons.fairwayBand ?? 24);
+        if (h <= top) {
+          const fn = fbm2(x * 0.011 + 7.7, z * 0.011 - 3.3, { seed: seed + 223, octaves: 3, warp: 0.45 });
+          if (fn < 0.30 + fw * 0.62) {                       // patchy when fw < 1
+            mat = MAT.FAIRWAY;
+            const bs = Math.max(3, seasons.bunkerSize ?? 11);
+            const bn = valueNoise2(x / bs + 41.0, z / bs - 17.0, seed + 233);
+            if (bn < (seasons.bunkerDensity ?? 0) * 0.45) mat = MAT.SAND;  // sand trap
+          }
+        }
       }
 
       vol.material[idx] = mat;

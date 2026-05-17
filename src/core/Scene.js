@@ -113,6 +113,11 @@ export class Scene {
         autumnEnd: s.get('seasons.autumnEnd'),
         coniferEnd: s.get('seasons.coniferEnd'),
         borderWarp: s.get('seasons.borderWarp'),
+        craggy: s.get('seasons.craggy'),
+        fairway: s.get('seasons.fairway'),
+        fairwayBand: s.get('seasons.fairwayBand'),
+        bunkerDensity: s.get('seasons.bunkerDensity'),
+        bunkerSize: s.get('seasons.bunkerSize'),
       },
     };
     opts.maxHeight = opts.lowland + opts.massif;   // derived; used by shadow cam + tree planting
@@ -145,6 +150,7 @@ export class Scene {
       shoreGlow: s.get('water.shoreGlow'),
     });
     this.scene.add(this.sea.group);
+    this._applyWaterLighting();          // fresh sea gets current sun + glint
 
     this._plantTrees(vol, opts);
   }
@@ -221,10 +227,17 @@ export class Scene {
     this.sun.color.set('#ff7a36').lerp(new THREE.Color('#fff3df'), day2);
     this.sun.intensity = THREE.MathUtils.lerp(0.5, 3.1, day2) * slider;
 
-    this.hemi.color.set('#e8a86a').lerp(new THREE.Color('#a9c8e6'), day2);
+    // ---- faked GI: sky-tinted hemisphere bounce (free, no extra pass) ----
+    // Defaults reproduce the previous look; the new bit is the hemi colour
+    // being pulled toward the LIVE sampled sky colour in _syncHorizonFog.
+    const giB = s.get('lighting.skyBounce');
+    const giG = s.get('lighting.groundBounce');
+    this._gi = { tint: s.get('lighting.bounceTint') };
+    this._hemiBase = new THREE.Color('#e8a86a').lerp(new THREE.Color('#a9c8e6'), day2);
+    this.hemi.color.copy(this._hemiBase);
     this.hemi.groundColor.set('#3a2a1c').lerp(new THREE.Color('#60503a'), day2);
-    this.hemi.intensity = THREE.MathUtils.lerp(0.30, 0.60, day2);
-    this.ambient.intensity = THREE.MathUtils.lerp(0.03, 0.09, day2);
+    this.hemi.intensity = THREE.MathUtils.lerp(0.30, 0.60, day2) * (giB / 0.55);
+    this.ambient.intensity = THREE.MathUtils.lerp(0.03, 0.09, day2) * (0.70 + giG);
 
     // Analytic fallback fog colour; the real one is sampled from the actual
     // sky-view LUT horizon each time the sky changes (see _syncHorizonFog) so
@@ -252,11 +265,22 @@ export class Scene {
     this.camera.fov = s.get('render.fov');
     this.camera.updateProjectionMatrix();
     this.scene.fog.density = s.get('render.fogDensity');
+
+    this._applyWaterLighting();
+  }
+
+  // Push sun + glint params to the sea (guarded — sea is rebuilt on regen).
+  _applyWaterLighting() {
+    if (!this.sea) return;
+    const s = this.store;
+    this.sea.setSun(this._sunDir(), this.sun.color);
+    this.sea.setGlint(s.get('lighting.sunGlint'), s.get('lighting.glintSpread'));
   }
 
   _onParam(evt) {
     const p = evt.path;
-    if (p === '*' || p.startsWith('sun.') || p.startsWith('atmosphere.') || p.startsWith('render.')) {
+    if (p === '*' || p.startsWith('sun.') || p.startsWith('atmosphere.') ||
+        p.startsWith('render.') || p.startsWith('lighting.')) {
       this._applyAll();
     }
     if (p === '*' || p.startsWith('island.') || p.startsWith('voxel.') || p.startsWith('seasons.') ||
@@ -325,6 +349,8 @@ export class Scene {
       };
       this.scene.fog.color.setRGB(aces(r), aces(g), aces(b), THREE.SRGBColorSpace);
       this.sea?.setHorizon(this.scene.fog.color);     // ocean rim → live sunset
+      // faked GI: pull the hemisphere fill toward the live sky colour
+      if (this._hemiBase) this.hemi.color.copy(this._hemiBase).lerp(this.scene.fog.color, this._gi?.tint ?? 0.7);
     } catch {
       /* HalfFloat readback unsupported on this driver — analytic fog stands */
     }
@@ -338,7 +364,7 @@ export class Scene {
       this.elapsed += dt;
 
       this.camDirector.update(dt);
-      this.sea?.update(this.elapsed);
+      this.sea?.update(this.elapsed, this.camera.position);
 
       this.camera.updateMatrixWorld();
       this.backdrop.updateCamera(this.camera);

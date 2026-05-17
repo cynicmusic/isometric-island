@@ -22,6 +22,7 @@ export const MAT = {
   ROCK: 5,
   DIRT: 6,
   AUTUMN: 7,
+  FAIRWAY: 8,            // manicured "greens" — uniform bright lime
 };
 
 // Each material: [lowColor, highColor] — gradient runs dark/low → light/high.
@@ -34,6 +35,7 @@ const GRAD = {
   [MAT.ROCK]:        [hx('#5a554b'), hx('#8a8276')],
   [MAT.DIRT]:        [hx('#6a4a2c'), hx('#a8814a')],
   [MAT.AUTUMN]:      [hx('#b5601f'), hx('#e8a52e')],   // warmer, more saturated
+  [MAT.FAIRWAY]:     [hx('#5fb22a'), hx('#a6ef4e')],   // golf "greens" — crisp lime
 };
 
 const SEAFLOOR_DEEP = hx('#05293c');   // darker deep-blue open ocean

@@ -117,20 +117,39 @@ export class Sea {
       side: THREE.DoubleSide,
     });
     const fade0 = params.radius * 1.4, fade1 = R * 0.96;
+    // Analytic sun-glint: a stretched specular streak where the sun reflects
+    // off the flat water plane. Pure in-shader (no extra pass) — mobile-cheap.
+    this._sunDir = new THREE.Vector3(0, 1, 0);
+    this._sunCol = new THREE.Color('#fff3df');
     this.surfaceMat.onBeforeCompile = (sh) => {
       sh.uniforms.uHorizon = { value: this._horizon };
       sh.uniforms.uF0 = { value: fade0 };
       sh.uniforms.uF1 = { value: fade1 };
+      sh.uniforms.uSunDir = { value: this._sunDir };
+      sh.uniforms.uSunCol = { value: this._sunCol };
+      sh.uniforms.uGlint = { value: 0.7 };
+      sh.uniforms.uGlintSpread = { value: 1.1 };
+      sh.uniforms.uCamPos = { value: new THREE.Vector3() };
       this._surfUniforms = sh.uniforms;
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec2 vWXZ;')
+        .replace('#include <common>', '#include <common>\nvarying vec2 vWXZ;\nvarying vec3 vWPos;')
         .replace('#include <begin_vertex>',
-          '#include <begin_vertex>\nvWXZ = (modelMatrix * vec4(transformed,1.0)).xz;');
+          '#include <begin_vertex>\n  vec4 _wp = modelMatrix * vec4(transformed,1.0);\n  vWXZ = _wp.xz;\n  vWPos = _wp.xyz;');
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>',
-          '#include <common>\nvarying vec2 vWXZ;\nuniform vec3 uHorizon;\nuniform float uF0;\nuniform float uF1;')
+          '#include <common>\nvarying vec2 vWXZ;\nvarying vec3 vWPos;\nuniform vec3 uHorizon;\nuniform float uF0;\nuniform float uF1;\nuniform vec3 uSunDir;\nuniform vec3 uSunCol;\nuniform float uGlint;\nuniform float uGlintSpread;\nuniform vec3 uCamPos;')
         .replace('#include <dithering_fragment>',
-          '#include <dithering_fragment>\n  float _f = smoothstep(uF0, uF1, length(vWXZ));\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, uHorizon, _f);\n  gl_FragColor.a = mix(gl_FragColor.a, 0.0, _f * _f);');
+          '#include <dithering_fragment>\n'
+          + '  vec3 _V = normalize(uCamPos - vWPos);\n'
+          + '  float _s = max(dot(reflect(-uSunDir, vec3(0.0,1.0,0.0)), _V), 0.0);\n'
+          + '  float _sp = clamp(uGlintSpread * 0.25, 0.0, 1.0);\n'
+          + '  float _core = pow(_s, mix(900.0, 70.0, _sp));\n'
+          + '  float _strk = pow(_s, mix(140.0, 14.0, _sp)) * 0.35;\n'
+          + '  float _g = (_core + _strk) * uGlint * smoothstep(-0.02, 0.14, uSunDir.y);\n'
+          + '  gl_FragColor.rgb += uSunCol * _g;\n'
+          + '  float _f = smoothstep(uF0, uF1, length(vWXZ));\n'
+          + '  gl_FragColor.rgb = mix(gl_FragColor.rgb, uHorizon, _f);\n'
+          + '  gl_FragColor.a = mix(gl_FragColor.a, 0.0, _f * _f);');
     };
     this.surface = new THREE.Mesh(new THREE.CircleGeometry(R, 96), this.surfaceMat);
     this.surface.rotation.x = -Math.PI / 2;
@@ -192,8 +211,18 @@ export class Sea {
     this._horizon.copy(color);
     if (this.floor) this.floor.material.color.copy(color).lerp(new THREE.Color('#0b4f68'), 0.6);
   }
+  setSun(dir, color) {
+    this._sunDir.copy(dir).normalize();
+    this._sunCol.copy(color);
+  }
+  setGlint(intensity, spread) {
+    if (!this._surfUniforms) return;
+    this._surfUniforms.uGlint.value = Math.max(0, intensity);
+    this._surfUniforms.uGlintSpread.value = Math.max(0.2, spread);
+  }
 
-  update(elapsed) {
+  update(elapsed, camPos) {
+    if (camPos && this._surfUniforms) this._surfUniforms.uCamPos.value.copy(camPos);
     this.causticMat.uniforms.uTime.value = elapsed;
     for (const l of this.lights) {
       const pulse = 0.86 + Math.sin(elapsed * 0.92 + l.userData.phase) * 0.10

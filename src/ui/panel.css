@@ -203,6 +203,7 @@
 .ff-section[data-section="island"]     { --label-gradient: linear-gradient(110deg, #6abc78 0%, #b0cc66 50%, #e8cf94 100%); --label-bar: #7cc07f; --label-wash: rgba(120,196,128,0.07); --label-wash-strong: rgba(120,196,128,0.13); }
 .ff-section[data-section="seasons"]    { --label-gradient: linear-gradient(110deg, #6fce4a 0%, #e6b800 45%, #bfe9f0 100%); --label-bar: #7fd24a; --label-wash: rgba(111,206,74,0.07);  --label-wash-strong: rgba(111,206,74,0.13); }
 .ff-section[data-section="water"]      { --label-gradient: linear-gradient(110deg, #2fd9c8 0%, #137a8c 55%, #0a4e6e 100%); --label-bar: #1ba0c0; --label-wash: rgba(27,160,192,0.07);  --label-wash-strong: rgba(27,160,192,0.13); }
+.ff-section[data-section="lighting"]   { --label-gradient: linear-gradient(110deg, #fff1c2 0%, #ffd166 50%, #ff9e3d 100%); --label-bar: #ffcf6a; --label-wash: rgba(255,206,106,0.08); --label-wash-strong: rgba(255,206,106,0.14); }
 .ff-section[data-section="render"]     { --label-gradient: linear-gradient(110deg, #a8b2bc 0%, #ecf0f4 50%, #889098 100%); --label-bar: #aab4be; --label-wash: rgba(170,180,190,0.05); --label-wash-strong: rgba(170,180,190,0.09); }
 
 .ff-section-blurb {

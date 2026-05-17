@@ -11,14 +11,12 @@
 
 export const EXPERIMENTAL = true;
 
-// Planned experiments (this pass only stands up the registry + UI; the
-// render-side hooks land per-feature, each behind enabled(key)).
+// Live experiments. (Bloom, aerial haze and sun-glint graduated to the main
+// "lighting" panel; only the genuinely-experimental, strip-risk effects stay
+// here.) All default OFF — flipping one opts into a guarded render hook.
 const FLAGS = [
-  { key: 'aerialHaze',   label: 'Aerial perspective', hint: 'sky-owned depth haze (replaces flat fog)' },
-  { key: 'planetR',      label: 'Tiny-planet sky',    hint: 'restore sunset Planet-R curvature/colour' },
-  { key: 'bloom',        label: 'Bloom',              hint: 'cheap threshold bloom on sun/spec' },
-  { key: 'godrays',      label: 'God rays',           hint: 'screen-space radial light shafts' },
-  { key: 'waterGlint',   label: 'Water glint',        hint: 'faked specular sun streak on the sea' },
+  { key: 'godrays', label: 'God rays (VGR)',  hint: 'screen-space radial light shafts — best at sunset' },
+  { key: 'planetR', label: 'Tiny-planet sky', hint: 'restore sunset Planet-R curvature — richer horizon' },
 ];
 
 export class Experimental {

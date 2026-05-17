@@ -11,6 +11,7 @@ import { makeTree } from '../flora/trees.js';
 import { mulberry32 } from '../gen/noise.js';
 import { SEASON } from '../gen/seasons.js';
 import { MAT } from '../gen/palette.js';
+import { PostFX } from '../fx/PostFX.js';
 
 // Atmosphere lives in km on a 6371 km planet; the island lives in metres at
 // ~1 km scale. We feed the sky a FIXED observer just above the surface (the
@@ -77,6 +78,11 @@ export class Scene {
     this.sea = null;
 
     this.camDirector = new FlyCameraDirector(this.camera, this.renderer.domElement);
+
+    // Experimental flags fed from main (segregated — Scene never imports the
+    // experimental module). Off = golden path.
+    this._exp = { godrays: false, planetR: false };
+    this.postfx = new PostFX(this.renderer);
 
     this._applyAll();
     this.regenerate();
@@ -306,6 +312,48 @@ export class Scene {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.postfx?.setSize();
+  }
+
+  // Fed from main.js (experimental.onChange). Off ⇒ golden path / Earth sky.
+  setExperimentalFlags(flags) {
+    const prevPR = this._exp.planetR;
+    this._exp = { ...this._exp, ...flags };
+    if (this._exp.planetR !== prevPR) this._applyPlanetR();
+  }
+
+  // Planet-R restore — sunset's artistic tiny-planet curvature. Public LUT
+  // setters only (atmosphere code untouched); fully reversible. OFF restores
+  // exact Earth values == the golden look.
+  _applyPlanetR() {
+    const on = this._exp.planetR;
+    const R = on ? 1000 : PLANET.groundRadius;                       // km
+    const thick = PLANET.atmosphereRadius - PLANET.groundRadius;     // keep 100 km shell
+    this.skyViewLUT.setGeometry({ planetRadiusKm: R, atmosphereThicknessKm: thick });
+    this.backdrop.setGeometry({ planetRadiusKm: R, atmosphereThicknessKm: thick });
+    const obs = new THREE.Vector3(0, R + 0.35, 0);
+    this.skyViewLUT.setObserverPosition(obs);
+    this.backdrop.setObserver(obs);
+    this._skyDirty = true;
+  }
+
+  // Per-frame post-FX inputs. bloom/haze are live "lighting" params; godrays
+  // is the experimental VGR flag. sunUV/visible drive godrays + haze bias.
+  _fxParams() {
+    const s = this.store;
+    const sd = this._sunDir();
+    const wp = (this._fxv ||= new THREE.Vector3());
+    wp.copy(this.camera.position).addScaledVector(sd, 100000).project(this.camera);
+    const sunUV = { x: wp.x * 0.5 + 0.5, y: wp.y * 0.5 + 0.5 };
+    const sunVisible = sd.y > 0.02 && wp.z < 1 &&
+      sunUV.x > -0.4 && sunUV.x < 1.4 && sunUV.y > -0.4 && sunUV.y < 1.4;
+    return {
+      bloom: s.get('lighting.bloom') || 0,
+      haze: s.get('lighting.aerialHaze') || 0,
+      godrays: this._exp.godrays ? 1.0 : 0,
+      hazeColor: this.scene.fog.color,
+      sunUV, sunVisible,
+    };
   }
 
   getDebugInfo() {
@@ -373,7 +421,7 @@ export class Scene {
       this.skyViewLUT.render(this.renderer);
       if (this._skyDirty) { this._syncHorizonFog(); this._skyDirty = false; }
 
-      this.renderer.render(this.scene, this.camera);
+      this.postfx.render(this.scene, this.camera, this._fxParams());
     };
     tick();
   }

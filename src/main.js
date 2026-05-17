@@ -164,6 +164,15 @@ uiRoot.appendChild(perf.root);
 const experimental = new Experimental();
 if (EXPERIMENTAL) uiRoot.appendChild(experimental.root);
 
+// Segregation: Scene never imports the experimental module; main is the
+// integrator. Push initial flags (all off ⇒ golden) + on every toggle.
+const pushExpFlags = () => scene.setExperimentalFlags({
+  godrays: experimental.enabled('godrays'),
+  planetR: experimental.enabled('planetR'),
+});
+pushExpFlags();
+experimental.onChange(pushExpFlags);
+
 scene.start();
 
 function handleAction(action) {

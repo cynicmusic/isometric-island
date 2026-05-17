@@ -127,7 +127,7 @@ export const schema = {
     blurb: 'screen-space radial scatter · downsample→march→upsample',
     fields: {
       enable: { type: 'bool', label: 'Enable', default: true, hint: 'G toggles · off = golden bypass (zero cost)' },
-      source: { type: 'float', label: 'Source mask', min: 0, max: 1, step: 0.02, default: 0, hint: '0 = raw-scene echoes · 1 = clean depth sky/occluder A/B' },
+      source: { type: 'float', label: 'Source mask', min: 0, max: 1, step: 0.02, default: 1, hint: '1 = clean depth sky/occluder · 0 = raw-scene debug echoes' },
       intensity: { type: 'float', label: 'Intensity', min: 0, max: 3, step: 0.05, default: 0.85, hint: 'first gain knob' },
       density: { type: 'float', label: 'Density', min: 0.2, max: 1, step: 0.02, default: 0.32, hint: 'ray reach toward the sun' },
       decay: { type: 'float', label: 'Decay', min: 0.8, max: 1, step: 0.005, default: 0.915, hint: 'tail length' },

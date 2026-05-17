@@ -371,7 +371,7 @@ export class Scene {
       threshold: gr.threshold ?? 0.62, horizon: gr.groundMask ?? 0.5,
       radius: gr.reach ?? 1.45, tint: gr.warmth ?? 0.5,
       resScale: gr.resScale ?? 0.25, sharp: gr.sharp ?? 0.25,
-      source: gr.source ?? 0, compare: !!gr.compare,
+      source: gr.source ?? 1, compare: !!gr.compare,
     } : { intensity: 0 };
     return {
       bloom: s.get('lighting.bloom') || 0,

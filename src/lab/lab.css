@@ -1,11 +1,71 @@
-/* Lab "extras" quick-knob panel — docked right (experimental panel is left). */
-.ff-panel.ff-lab {
-  right: 12px;
-  left: auto;
-  width: 280px;
-  transform: none;
-  opacity: 1;
-  pointer-events: auto;
+/* Lab now runs the real sim ControlPanel (panel.css, right-docked,
+   collapsible/muteable) — no bespoke left bar, no stacking hacks. Only two
+   lab-specific bits remain: the processing pill and the scene-framing row. */
+
+/* compact sunset/moonset framing row injected at the top of the footer */
+.ff-lab-frames {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 8px;
 }
-.ff-panel.ff-lab .ff-field { padding: 2px 0; }
-.ff-panel.ff-lab .ff-field-name { font-size: 11px; }
+.ff-lab-frames .ff-btn { flex: 1; }
+
+#lab-compare {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 45;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 220, 180, 0.92);
+  transition: opacity 120ms ease;
+}
+#lab-compare.on { opacity: 1; }
+#lab-compare i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(255, 145, 68, 0.62);
+  box-shadow: 0 0 10px rgba(255, 130, 40, 0.45);
+}
+#lab-compare span {
+  position: absolute;
+  top: 14px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 145, 68, 0.32);
+  border-radius: 4px;
+  background: rgba(12, 10, 8, 0.48);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+#lab-compare span:first-child { left: 14px; }
+#lab-compare span:last-child { right: 14px; }
+
+/* Subtle bottom processing pill — "a change is still being drawn, don't
+   screenshot yet". Mirrors window.lab.busy / <body data-lab-busy>. */
+#lab-busy {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 192, 124, 0.95);
+  background: rgba(20, 14, 10, 0.55);
+  border: 1px solid rgba(255, 150, 70, 0.35);
+  border-radius: 999px;
+  padding: 6px 14px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 130ms ease;
+  z-index: 60;
+  box-shadow: 0 0 14px rgba(255, 140, 40, 0.22);
+}
+#lab-busy.on { opacity: 1; }
+#lab-busy::before { content: "\25CF\00A0"; color: #ffae4a; }

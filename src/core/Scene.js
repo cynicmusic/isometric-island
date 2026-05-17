@@ -344,11 +344,27 @@ export class Scene {
   _fxParams() {
     const s = this.store;
     const sd = this._sunDir();
+    // The sun is directional, so its screen UV is the same at ANY positive
+    // distance — but it must be projected from INSIDE the far plane. The old
+    // code pushed it 100000 units out while camera.far is 32000, so project()
+    // returned z>1 and the `wp.z<1` gate failed forever: god rays were
+    // bypassed unconditionally. Use an explicit forward-hemisphere test plus
+    // a safe in-frustum sample distance instead.
+    const fwd = (this._fxf ||= new THREE.Vector3());
+    this.camera.getWorldDirection(fwd);
+    const frontDot = fwd.dot(sd);
     const wp = (this._fxv ||= new THREE.Vector3());
-    wp.copy(this.camera.position).addScaledVector(sd, 100000).project(this.camera);
+    wp.copy(this.camera.position).addScaledVector(sd, 2000).project(this.camera);
     const sunUV = { x: wp.x * 0.5 + 0.5, y: wp.y * 0.5 + 0.5 };
-    const sunVisible = sd.y > 0.02 && wp.z < 1 &&
-      sunUV.x > -0.4 && sunUV.x < 1.4 && sunUV.y > -0.4 && sunUV.y < 1.4;
+    const offscreen = Math.max(0, -sunUV.x, sunUV.x - 1, -sunUV.y, sunUV.y - 1);
+    // Lab god-ray tuning needs the radial march to keep talking when the sun
+    // source slips just outside the viewport. This is an influence fade, not
+    // a strict "solar disc is visible" test.
+    const frontFade = THREE.MathUtils.smoothstep(frontDot, -0.22, 0.08);
+    const edgeFade = 1 - THREE.MathUtils.smoothstep(offscreen, 1.25, 3.25);
+    const heightFade = THREE.MathUtils.smoothstep(sd.y, -0.02, 0.04);
+    const sunFade = frontFade * edgeFade * heightFade;
+    const sunVisible = sunFade > 0.001;
     const e = this._exp;
     const god = e.godrays ? {
       intensity: e.godIntensity ?? 1, samples: e.godSamples ?? 16,
@@ -356,13 +372,15 @@ export class Scene {
       weight: e.godWeight ?? 0.6, exposure: e.godExposure ?? 0.9,
       threshold: e.godThreshold ?? 0.62, horizon: e.godHorizon ?? 0.5,
       radius: e.godRadius ?? 1.1, tint: e.godTint ?? 0.5,
+      resScale: e.godResScale ?? 0.25, sharp: e.godSharp ?? 0,
+      source: e.godSource ?? 0, compare: !!e.godCompare,
     } : { intensity: 0 };
     return {
       bloom: s.get('lighting.bloom') || 0,
       haze: s.get('lighting.aerialHaze') || 0,
       hazeColor: this.scene.fog.color,
       sunCol: this.sun.color,
-      sunUV, sunVisible, god,
+      sunUV, sunVisible, sunFade, god,
     };
   }
 

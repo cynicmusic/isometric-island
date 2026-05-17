@@ -38,7 +38,7 @@ export class ControlPanel {
       <kbd>Q/↑↓</kbd> up·down
       <kbd>drag</kbd> look
       <kbd>H</kbd> panel
-      <kbd>E</kbd> exp
+      <kbd>G</kbd> god rays
       <kbd>F</kbd> fps
     `;
     document.body.appendChild(this.hints);
@@ -308,14 +308,14 @@ export class ControlPanel {
     }
     footer.appendChild(grid);
 
-    // default · random · baseline. "baseline" is the experimentation safety
-    // net: kill all experimental effects + snap back to the golden A1 preset.
+    // default · random · baseline. "baseline" is the safety net: kill post
+    // FX + snap back to the golden A1 preset.
     const trio = document.createElement('div');
     trio.className = 'ff-btn-trio';
     trio.innerHTML = `
       <button class="ff-btn ff-mini" data-action="default">default</button>
       <button class="ff-btn ff-mini" data-action="random">random</button>
-      <button class="ff-btn ff-mini" data-action="baseline" title="all experimental FX off + snap to golden A1">baseline</button>
+      <button class="ff-btn ff-mini" data-action="baseline" title="post FX off + snap to golden A1">baseline</button>
     `;
     footer.appendChild(trio);
 

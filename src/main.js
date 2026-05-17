@@ -8,7 +8,6 @@ import { ControlPanel } from './ui/ControlPanel.js';
 import { PerfOverlay } from './ui/PerfOverlay.js';
 import { loadSticky, setSticky, clearSticky } from './config/sticky.js';
 import { loadPresets, savePresetToDisk } from './config/presets.js';
-import { Experimental, EXPERIMENTAL } from './experimental/experimental.js';
 
 const canvasContainer = document.getElementById('canvas-container');
 const uiRoot = document.getElementById('ui-root');
@@ -159,17 +158,6 @@ uiRoot.appendChild(panel.root);
 const perf = new PerfOverlay({ scene });
 uiRoot.appendChild(perf.root);
 
-// Experimental sandbox — segregated; inert until a flag is flipped. Always
-// constructed (so "baseline" can allOff) but only mounted when EXPERIMENTAL.
-const experimental = new Experimental();
-if (EXPERIMENTAL) uiRoot.appendChild(experimental.root);
-
-// Segregation: Scene never imports the experimental module; main is the
-// integrator. Push initial flags (all off ⇒ golden) + on every toggle.
-const pushExp = () => scene.setExperimental(experimental.state());
-pushExp();
-experimental.onChange(pushExp);
-
 scene.start();
 
 function handleAction(action) {
@@ -184,22 +172,19 @@ function handleAction(action) {
       panel.flashStatus('default · sticky cleared', 'ok');
       break;
     case 'baseline':
-      // Experimentation safety net: kill every experimental effect, then snap
-      // back to the golden A1 preset (or built-in defaults if A1 is absent).
-      experimental.allOff();
+      // Safety net: snap back to the golden A1 preset (or built-in defaults),
+      // then force every post-FX feature to its zero-cost off state.
       if (presets['A1'] && presets['A1'].params) {
         applyPreset(presets['A1']);
       } else {
         store.reset();
         scene.regenerate();
       }
-      // store.fromJSON MERGES — keys absent from A1 keep their (possibly
-      // cranked) values. Force the post-FX params to golden-neutral so
-      // "baseline" reliably returns to the zero-cost bypass path.
       store.set('lighting.bloom', 0);
       store.set('lighting.aerialHaze', 0);
+      store.set('godrays.enable', false);
       panel.refreshPresets();
-      panel.flashStatus('baseline · experimental off', 'ok');
+      panel.flashStatus('baseline · FX off', 'ok');
       break;
     case 'random':
       randomize();
@@ -226,7 +211,7 @@ function randomize() {
   scene.regenerate();                             // immediate, single rebuild
 }
 
-// H/B panel · F fps · R randomize · Esc closes panel (NOT D — D is WASD).
+// H/B panel · G god rays · F fps · R randomize · Esc closes panel (NOT D — D is WASD).
 // A focused range slider must NOT eat these — only ignore real text entry.
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;                       // ignore OS key-repeat (was double-randomizing)
@@ -248,14 +233,18 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (k === 'h' || k === 'b') { event.preventDefault(); blur(); panel.toggle(); }
+  else if (k === 'g') {
+    event.preventDefault(); blur();
+    const next = !store.get('godrays.enable');
+    store.set('godrays.enable', next);
+    panel.flashStatus(next ? 'god rays on' : 'god rays off', 'ok');
+  }
   else if (k === 'escape') {
     event.preventDefault(); blur();
     if (!panel.collapsed) panel.toggle();
-    if (EXPERIMENTAL && !experimental.collapsed) experimental.toggle();
   }
-  else if (k === 'e') { if (EXPERIMENTAL) { event.preventDefault(); blur(); experimental.toggle(); } }
   else if (k === 'f') { event.preventDefault(); blur(); perf.toggle(); }
   else if (k === 'r') { event.preventDefault(); blur(); randomize(); panel.flashStatus('rolled', 'ok'); }
 });
 
-window.isometric = { scene, store, panel, perf, sticky, presets: presetApi, experimental };
+window.isometric = { scene, store, panel, perf, sticky, presets: presetApi };

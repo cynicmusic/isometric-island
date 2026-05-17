@@ -120,6 +120,28 @@ export const schema = {
       horizonWarp: { type: 'bool', label: 'Horizon warp', default: true },
     },
   },
+
+  godrays: {
+    label: 'god rays',
+    icon: '✺',
+    blurb: 'screen-space radial scatter · downsample→march→upsample',
+    fields: {
+      enable: { type: 'bool', label: 'Enable', default: true, hint: 'G toggles · off = golden bypass (zero cost)' },
+      source: { type: 'float', label: 'Source mask', min: 0, max: 1, step: 0.02, default: 0, hint: '0 = raw-scene echoes · 1 = clean depth sky/occluder A/B' },
+      intensity: { type: 'float', label: 'Intensity', min: 0, max: 3, step: 0.05, default: 0.85, hint: 'first gain knob' },
+      density: { type: 'float', label: 'Density', min: 0.2, max: 1, step: 0.02, default: 0.32, hint: 'ray reach toward the sun' },
+      decay: { type: 'float', label: 'Decay', min: 0.8, max: 1, step: 0.005, default: 0.915, hint: 'tail length' },
+      weight: { type: 'float', label: 'Weight', min: 0.1, max: 2, step: 0.05, default: 2, hint: 'per-sample lift' },
+      exposure: { type: 'float', label: 'Exposure', min: 0.1, max: 3, step: 0.05, default: 0.7, hint: 'final ray gain after the march' },
+      threshold: { type: 'float', label: 'Threshold', min: 0.05, max: 0.95, step: 0.01, default: 0.62, hint: 'source cutoff' },
+      groundMask: { type: 'float', label: 'Ground mask', min: 0, max: 1, step: 0.02, default: 0.5, hint: 'suppresses sources below the sun' },
+      reach: { type: 'float', label: 'Reach', min: 0.4, max: 2.5, step: 0.05, default: 1.45, hint: 'screen-space falloff radius' },
+      warmth: { type: 'float', label: 'Warmth', min: 0, max: 1, step: 0.02, default: 0.5, hint: '0 = sky-colour rays · 1 = warm sun' },
+      samples: { type: 'int', label: 'Samples', min: 6, max: 48, step: 1, default: 16, hint: 'march taps' },
+      resScale: { type: 'float', label: 'Buffer scale', min: 0.06, max: 1, step: 0.02, default: 0.25, hint: 'LOW = cheap + blocky scatter' },
+      sharp: { type: 'float', label: 'Upsample snap', min: 0, max: 1, step: 0.05, default: 0.25, hint: '0 = bilinear · 1 = raw low-res blocks; no blur pass' },
+    },
+  },
 };
 
-export const sectionOrder = ['sun', 'atmosphere', 'lighting', 'voxel', 'island', 'seasons', 'water', 'render'];
+export const sectionOrder = ['sun', 'atmosphere', 'lighting', 'voxel', 'island', 'seasons', 'water', 'render', 'godrays'];

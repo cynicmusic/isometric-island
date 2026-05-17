@@ -46,8 +46,7 @@ export class FlyCameraDirector {
     window.addEventListener('keydown', (e) => {
       if (this._ignore(e)) return;
       const key = e.key.toLowerCase();
-      // 'e' is intentionally NOT captured — it toggles the experimental
-      // panel. Vertical up is Q-pair via ArrowUp; down stays Q / ArrowDown.
+      // Vertical up is Q-pair via ArrowUp; down stays Q / ArrowDown.
       if (['w', 'a', 's', 'd', 'q', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
         e.preventDefault();
         if (!this._keys.has(key)) this._keys.set(key, performance.now());

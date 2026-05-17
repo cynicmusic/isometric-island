@@ -79,9 +79,8 @@ export class Scene {
 
     this.camDirector = new FlyCameraDirector(this.camera, this.renderer.domElement);
 
-    // Experimental flags fed from main (segregated — Scene never imports the
-    // experimental module). Off = golden path.
-    this._exp = { godrays: false, planetR: false, planetRadiusKm: 1200 };
+    // Lab-only Planet-R hook. God rays are normal ParamStore state.
+    this._exp = { planetR: false, planetRadiusKm: 1200 };
     this.postfx = new PostFX(this.renderer);
 
     this._applyAll();
@@ -315,8 +314,7 @@ export class Scene {
     this.postfx?.setSize();
   }
 
-  // Fed from main.js (experimental.onChange) with the full experimental
-  // state snapshot. Off ⇒ golden path / Earth sky.
+  // Lab-only Planet-R snapshot. Off ⇒ Earth sky.
   setExperimental(st) {
     const prev = this._exp.planetR ? (this._exp.planetRadiusKm | 0) : -1;
     this._exp = st || {};
@@ -339,8 +337,8 @@ export class Scene {
     this._skyDirty = true;
   }
 
-  // Per-frame post-FX inputs. bloom/haze are live "lighting" params; godrays
-  // is the experimental VGR flag. sunUV/visible drive godrays + haze bias.
+  // Per-frame post-FX inputs. bloom/haze/godrays are live store params.
+  // sunUV/visible drive godrays + haze bias.
   _fxParams() {
     const s = this.store;
     const sd = this._sunDir();
@@ -365,15 +363,15 @@ export class Scene {
     const heightFade = THREE.MathUtils.smoothstep(sd.y, -0.02, 0.04);
     const sunFade = frontFade * edgeFade * heightFade;
     const sunVisible = sunFade > 0.001;
-    const e = this._exp;
-    const god = e.godrays ? {
-      intensity: e.godIntensity ?? 1, samples: e.godSamples ?? 16,
-      density: e.godDensity ?? 0.6, decay: e.godDecay ?? 0.93,
-      weight: e.godWeight ?? 0.6, exposure: e.godExposure ?? 0.9,
-      threshold: e.godThreshold ?? 0.62, horizon: e.godHorizon ?? 0.5,
-      radius: e.godRadius ?? 1.1, tint: e.godTint ?? 0.5,
-      resScale: e.godResScale ?? 0.25, sharp: e.godSharp ?? 0,
-      source: e.godSource ?? 0, compare: !!e.godCompare,
+    const gr = s.get('godrays') || {};
+    const god = gr.enable ? {
+      intensity: gr.intensity ?? 0.85, samples: gr.samples ?? 16,
+      density: gr.density ?? 0.32, decay: gr.decay ?? 0.915,
+      weight: gr.weight ?? 2, exposure: gr.exposure ?? 0.7,
+      threshold: gr.threshold ?? 0.62, horizon: gr.groundMask ?? 0.5,
+      radius: gr.reach ?? 1.45, tint: gr.warmth ?? 0.5,
+      resScale: gr.resScale ?? 0.25, sharp: gr.sharp ?? 0.25,
+      source: gr.source ?? 0, compare: !!gr.compare,
     } : { intensity: 0 };
     return {
       bloom: s.get('lighting.bloom') || 0,

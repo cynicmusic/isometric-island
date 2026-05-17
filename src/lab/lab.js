@@ -54,7 +54,7 @@ const PLANETR = {
   },
 };
 const labSchema = { ...schema, godrays: GOD, planetr: PLANETR };
-const labSectionOrder = [...sectionOrder, 'godrays', 'planetr'];
+const labSectionOrder = [...sectionOrder.filter((key) => key !== 'godrays'), 'godrays', 'planetr'];
 
 function buildLabDefaults() {
   const out = {};
@@ -115,17 +115,10 @@ function syncCompareOverlay() {
   document.body.dataset.labCompare = on ? '1' : '0';
 }
 
-// ---- god-ray / planet-r → Scene (the lab is the integrator; Scene is
-// untouched — it still consumes a plain experimental snapshot) ------------
+// ---- lab-only planet-r → Scene (god rays are normal store params) --------
 function pushExp() {
-  const g = store.get('godrays'), pr = store.get('planetr');
+  const pr = store.get('planetr');
   scene.setExperimental({
-    godrays: !!g.enable,
-    godIntensity: g.intensity, godSamples: g.samples, godDensity: g.density,
-    godDecay: g.decay, godWeight: g.weight, godExposure: g.exposure,
-    godThreshold: g.threshold, godHorizon: g.groundMask, godRadius: g.reach,
-    godTint: g.warmth, godResScale: g.resScale, godSharp: g.sharp,
-    godSource: g.source, godCompare: !!g.compare,
     planetR: !!pr.enable, planetRadiusKm: pr.radiusKm,
   });
   syncCompareOverlay();
@@ -209,7 +202,7 @@ uiRoot.appendChild(panel.root);
 panel.toggle();                                       // lab opens OPEN (tuning)
 panel.hints.innerHTML = `
   <kbd>WASD</kbd> fly <kbd>drag</kbd> look
-  <kbd>H</kbd> mute panel <kbd>C</kbd> compare <kbd>[</kbd> sunset <kbd>]</kbd> moonset <kbd>R</kbd> reseed`;
+  <kbd>H</kbd> mute panel <kbd>G</kbd> rays <kbd>C</kbd> compare <kbd>[</kbd> sunset <kbd>]</kbd> moonset <kbd>R</kbd> reseed`;
 panel.hints.classList.add('show');
 
 // compact scene-framing row injected into the footer (lab-only DOM; the
@@ -238,6 +231,10 @@ window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   const blur = () => { if (t && t.tagName === 'INPUT' && t.blur) t.blur(); };
   if (k === 'h' || k === 'b') { e.preventDefault(); blur(); panel.toggle(); }
+  else if (k === 'g') {
+    e.preventDefault(); blur();
+    store.set('godrays.enable', !store.get('godrays.enable'));
+  }
   else if (k === 'c') {
     e.preventDefault(); blur();
     store.set('godrays.compare', !store.get('godrays.compare'));

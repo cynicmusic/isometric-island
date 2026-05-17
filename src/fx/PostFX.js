@@ -1,6 +1,6 @@
 // Shared post-FX plumbing — built ONCE so bloom (main · lighting), aerial
-// haze (main · lighting) and god rays (lab · god-ray section, experimental in
-// main) hang off a single offscreen pass. Mobile budget (MacBook / iPhone):
+// haze (main · lighting) and god rays (normal god-ray section) hang off a
+// single offscreen pass. Mobile budget (MacBook / iPhone):
 // when EVERY effect is off this bypasses entirely and renders straight to
 // screen — byte-identical golden path, zero extra targets/passes. LDR
 // screen-space fakes, no MRT.

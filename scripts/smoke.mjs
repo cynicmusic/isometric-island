@@ -137,7 +137,7 @@ await page.screenshot({ path: path.join(ART, 'smoke-panel.png') });
 
 const presetCheck = await page.evaluate(() => ({
   slots: Object.keys(window.isometric.presets.slots).sort(),
-  s1el: window.isometric.presets.slots['1']?.params?.sun?.elevationDeg,
+  s1el: window.isometric.presets.slots['A1']?.params?.sun?.elevationDeg,
   liveEl: window.isometric.store.get('sun.elevationDeg'),
 }));
 
@@ -155,10 +155,10 @@ await page.evaluate(async () => {
     cam: { p: c.position.toArray(), q: c.quaternion.toArray() },
     t: Date.now(),
   };
-  window.isometric.presets.slots['1'] = preset;
+  window.isometric.presets.slots['A1'] = preset;
   await fetch('/__iso-presets', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slot: 1, preset }),
+    body: JSON.stringify({ slot: 'A1', preset }),
   });
   // Persist a CONFLICTING sticky seed (written after the store re-pin so it
   // sticks). Pre-fix this clobbered the preset on reload.

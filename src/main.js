@@ -27,7 +27,8 @@ function setAt(obj, path, value) {
 // Presets must be available before boot: a reload restores preset 1 (the
 // "default" slot) as the full startup state — every param + camera pose.
 const presets = await loadPresets();
-const bootPreset = presets['1'];
+let activeBank = 'A';
+const bootPreset = presets['A1'];           // bank A slot 1 = the boot state
 
 function deepMerge(target, source) {
   for (const k in source) {
@@ -119,23 +120,37 @@ function applyPreset(p) {
   return true;
 }
 
+const keyOf = (slot) => `${activeBank}${slot}`;   // e.g. "A1".."H8"
+
 function savePreset(slot) {
+  const key = keyOf(slot);
   const p = capturePreset();
-  presets[slot] = p;
-  savePresetToDisk(slot, p);
+  presets[key] = p;
+  savePresetToDisk(key, p);
   panel.refreshPresets();
-  panel.flashStatus(slot === 1 ? 'saved slot 1 · default' : `saved slot ${slot}`, 'ok');
+  panel.flashStatus(key === 'A1' ? 'saved A1 · default' : `saved ${key}`, 'ok');
 }
 
 function loadPreset(slot) {
-  const p = presets[slot];
-  if (!p) { panel.flashStatus(`slot ${slot} empty`, 'err'); return; }
+  const key = keyOf(slot);
+  const p = presets[key];
+  if (!p) { panel.flashStatus(`${key} empty`, 'err'); return; }
   applyPreset(p);
   panel.refreshPresets();
-  panel.flashStatus(`loaded slot ${slot}`, 'ok');
+  panel.flashStatus(`loaded ${key}`, 'ok');
 }
 
-const presetApi = { slots: presets, save: savePreset, load: loadPreset };
+function setBank(bank) {
+  if (!/^[A-H]$/.test(bank) || bank === activeBank) return;
+  activeBank = bank;
+  panel.refreshPresets();
+  panel.flashStatus(`bank ${bank}`, 'ok');
+}
+
+const presetApi = {
+  slots: presets, save: savePreset, load: loadPreset,
+  setBank, getBank: () => activeBank,
+};
 
 const panel = new ControlPanel({ store, schema, sectionOrder, sticky, presets: presetApi, onAction: handleAction });
 uiRoot.appendChild(panel.root);
@@ -176,10 +191,10 @@ function handleAction(action) {
       store.reset();
       scene.regenerate();
       panel.refreshSticky();
-      presets[1] = capturePreset();
-      savePresetToDisk(1, presets[1]);
+      presets['A1'] = capturePreset();
+      savePresetToDisk('A1', presets['A1']);
       panel.refreshPresets();
-      panel.flashStatus('factory reset · slot 1 restored', 'ok');
+      panel.flashStatus('factory reset · A1 restored', 'ok');
       break;
     case 'random':
       randomize();

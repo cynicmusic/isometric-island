@@ -391,44 +391,74 @@
 
 /* Preset slots — 1 2 3 4 / 5 6 7 8. Filled slots carry a gradient sampled
    from their own params; empty slots are faint + dashed. */
-/* Compact slots: number on the left, the gradient swatch takes the rest.
-   Two rows of four, sized in proportion to the text — no wasted weight. */
+/* Bank selector A–H — one tight row; the active bank glows. */
+.ff-banks {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 3px;
+}
+.ff-bank {
+  height: 15px;
+  border-radius: 2px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(210, 216, 220, 0.55);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms, border-color 120ms, background 120ms, box-shadow 120ms;
+}
+.ff-bank:hover { color: rgba(235, 240, 245, 0.9); border-color: rgba(255, 200, 140, 0.45); }
+.ff-bank.active {
+  color: #0c1117;
+  background: linear-gradient(180deg, #ffd9a0, #ff9326);
+  border-color: rgba(255, 206, 122, 0.9);
+  box-shadow: 0 0 8px rgba(255, 147, 38, 0.45);
+}
+
+/* Preset slots 1–8 of the active bank — shrunk ~50% (one row of 8). Each
+   filled slot is a tiny sky/land/water postcard; number is a corner badge. */
 .ff-presets {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   gap: 3px;
+  margin-top: 3px;
 }
 .ff-preset {
   position: relative;
-  height: 16px;
+  height: 22px;
   border-radius: 2px;
   border: 1px solid var(--border-strong);
   background-color: rgba(255, 255, 255, 0.03);
   background-position: center;
   background-size: cover;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding-left: 5px;
   overflow: hidden;
-  transition: box-shadow 140ms, border-color 140ms;
+  transition: box-shadow 140ms, border-color 140ms, transform 80ms;
 }
 .ff-preset:not(.filled) { border-style: dashed; }
 .ff-preset.filled { border-color: rgba(255, 255, 255, 0.22); }
 .ff-preset-num {
-  position: relative;
-  z-index: 1;
+  position: absolute;
+  top: 0;
+  left: 1px;
   font-family: var(--font-mono);
-  font-size: 9px;
-  line-height: 1;
+  font-size: 8px;
+  line-height: 1.2;
   color: rgba(225, 230, 235, 0.5);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
 }
 .ff-preset.filled .ff-preset-num { color: #fff; font-weight: 700; }
 .ff-preset:hover {
-  border-color: rgba(255, 200, 140, 0.6);
-  box-shadow: inset 0 0 0 1px rgba(255, 220, 180, 0.35);
+  border-color: rgba(255, 200, 140, 0.65);
+  box-shadow: inset 0 0 0 1px rgba(255, 220, 180, 0.4);
+  transform: translateY(-1px);
 }
 
 .ff-btn {

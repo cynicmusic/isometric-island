@@ -268,9 +268,28 @@ export class ControlPanel {
     const footer = document.createElement('div');
     footer.className = 'ff-panel-footer';
 
-    // Preset slots — 1 2 3 4 / 5 6 7 8. Click loads, shift-click saves.
-    // Slot 1 is the conceptual default. Each filled slot is painted with a
-    // gradient sampled from its own params (see presetGradient).
+    // Bank row A–H — selects which 8-slot bank the preset row + the 1-8
+    // hotkeys address. Click-only (letters collide with WASD/h/b/f/r).
+    const banks = document.createElement('div');
+    banks.className = 'ff-banks';
+    this.bankEls = new Map();
+    for (const L of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']) {
+      const b = document.createElement('button');
+      b.className = 'ff-bank';
+      b.dataset.bank = L;
+      b.textContent = L;
+      b.title = `bank ${L}`;
+      b.addEventListener('click', () => {
+        this.presets.setBank?.(L);
+        this._syncBankActive();
+      });
+      banks.appendChild(b);
+      this.bankEls.set(L, b);
+    }
+    footer.appendChild(banks);
+
+    // Preset slots 1–8 of the active bank (one shrunk row). Click loads,
+    // shift-click saves. Each filled slot is a tiny sky/land/water postcard.
     const grid = document.createElement('div');
     grid.className = 'ff-presets';
     this.presetEls = new Map();
@@ -278,7 +297,6 @@ export class ControlPanel {
       const b = document.createElement('button');
       b.className = 'ff-preset';
       b.dataset.slot = String(slot);
-      b.title = `slot ${slot}${slot === 1 ? ' (default)' : ''} — click load · shift-click save`;
       b.innerHTML = `<span class="ff-preset-num">${slot}</span>`;
       b.addEventListener('click', (e) => {
         if (e.shiftKey) this.presets.save(slot);
@@ -320,14 +338,24 @@ export class ControlPanel {
     this.refreshPresets();
   }
 
+  _syncBankActive() {
+    if (!this.bankEls) return;
+    const active = this.presets?.getBank?.() || 'A';
+    for (const [L, b] of this.bankEls) b.classList.toggle('active', L === active);
+  }
+
   refreshPresets() {
+    this._syncBankActive();
     if (!this.presetEls) return;
+    const bank = this.presets?.getBank?.() || 'A';
     const slots = this.presets?.slots || {};
     for (const [slot, b] of this.presetEls) {
-      const p = slots[slot];
+      const key = `${bank}${slot}`;
+      const p = slots[key];
       const filled = !!p;
       b.classList.toggle('filled', filled);
       b.style.backgroundImage = filled ? (presetGradient(p) || '') : '';
+      b.title = `${key}${key === 'A1' ? ' (default)' : ''} — click load · shift-click save`;
     }
   }
 

@@ -120,6 +120,6 @@ export default defineConfig(({ command }) => ({
   server: { host: '127.0.0.1', port: 5193, strictPort: true },
   build: {
     target: 'esnext',
-    rollupOptions: { input: { main: path.resolve('index.html') } },
+    rollupOptions: { input: { main: path.resolve('index.html'), lab: path.resolve('lab/index.html') } },
   },
 }));

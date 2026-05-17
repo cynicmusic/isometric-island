@@ -166,12 +166,9 @@ if (EXPERIMENTAL) uiRoot.appendChild(experimental.root);
 
 // Segregation: Scene never imports the experimental module; main is the
 // integrator. Push initial flags (all off ⇒ golden) + on every toggle.
-const pushExpFlags = () => scene.setExperimentalFlags({
-  godrays: experimental.enabled('godrays'),
-  planetR: experimental.enabled('planetR'),
-});
-pushExpFlags();
-experimental.onChange(pushExpFlags);
+const pushExp = () => scene.setExperimental(experimental.state());
+pushExp();
+experimental.onChange(pushExp);
 
 scene.start();
 
@@ -196,6 +193,11 @@ function handleAction(action) {
         store.reset();
         scene.regenerate();
       }
+      // store.fromJSON MERGES — keys absent from A1 keep their (possibly
+      // cranked) values. Force the post-FX params to golden-neutral so
+      // "baseline" reliably returns to the zero-cost bypass path.
+      store.set('lighting.bloom', 0);
+      store.set('lighting.aerialHaze', 0);
       panel.refreshPresets();
       panel.flashStatus('baseline · experimental off', 'ok');
       break;

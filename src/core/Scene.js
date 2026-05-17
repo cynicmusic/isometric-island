@@ -81,7 +81,7 @@ export class Scene {
 
     // Experimental flags fed from main (segregated — Scene never imports the
     // experimental module). Off = golden path.
-    this._exp = { godrays: false, planetR: false };
+    this._exp = { godrays: false, planetR: false, planetRadiusKm: 1200 };
     this.postfx = new PostFX(this.renderer);
 
     this._applyAll();
@@ -315,19 +315,21 @@ export class Scene {
     this.postfx?.setSize();
   }
 
-  // Fed from main.js (experimental.onChange). Off ⇒ golden path / Earth sky.
-  setExperimentalFlags(flags) {
-    const prevPR = this._exp.planetR;
-    this._exp = { ...this._exp, ...flags };
-    if (this._exp.planetR !== prevPR) this._applyPlanetR();
+  // Fed from main.js (experimental.onChange) with the full experimental
+  // state snapshot. Off ⇒ golden path / Earth sky.
+  setExperimental(st) {
+    const prev = this._exp.planetR ? (this._exp.planetRadiusKm | 0) : -1;
+    this._exp = st || {};
+    const cur = this._exp.planetR ? (this._exp.planetRadiusKm | 0) : -1;
+    if (cur !== prev) this._applyPlanetR();
   }
 
-  // Planet-R restore — sunset's artistic tiny-planet curvature. Public LUT
-  // setters only (atmosphere code untouched); fully reversible. OFF restores
-  // exact Earth values == the golden look.
+  // Planet-R restore — sunset's artistic tiny-planet curvature, now a tunable
+  // radius. Public LUT setters only (atmosphere code untouched); reversible.
+  // OFF restores exact Earth values == the golden look.
   _applyPlanetR() {
     const on = this._exp.planetR;
-    const R = on ? 1000 : PLANET.groundRadius;                       // km
+    const R = on ? Math.max(150, this._exp.planetRadiusKm || 1200) : PLANET.groundRadius;  // km
     const thick = PLANET.atmosphereRadius - PLANET.groundRadius;     // keep 100 km shell
     this.skyViewLUT.setGeometry({ planetRadiusKm: R, atmosphereThicknessKm: thick });
     this.backdrop.setGeometry({ planetRadiusKm: R, atmosphereThicknessKm: thick });
@@ -347,12 +349,20 @@ export class Scene {
     const sunUV = { x: wp.x * 0.5 + 0.5, y: wp.y * 0.5 + 0.5 };
     const sunVisible = sd.y > 0.02 && wp.z < 1 &&
       sunUV.x > -0.4 && sunUV.x < 1.4 && sunUV.y > -0.4 && sunUV.y < 1.4;
+    const e = this._exp;
+    const god = e.godrays ? {
+      intensity: e.godIntensity ?? 1, samples: e.godSamples ?? 16,
+      density: e.godDensity ?? 0.6, decay: e.godDecay ?? 0.93,
+      weight: e.godWeight ?? 0.6, exposure: e.godExposure ?? 0.9,
+      threshold: e.godThreshold ?? 0.62, horizon: e.godHorizon ?? 0.5,
+      radius: e.godRadius ?? 1.1, tint: e.godTint ?? 0.5,
+    } : { intensity: 0 };
     return {
       bloom: s.get('lighting.bloom') || 0,
       haze: s.get('lighting.aerialHaze') || 0,
-      godrays: this._exp.godrays ? 1.0 : 0,
       hazeColor: this.scene.fog.color,
-      sunUV, sunVisible,
+      sunCol: this.sun.color,
+      sunUV, sunVisible, god,
     };
   }
 

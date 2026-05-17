@@ -8,8 +8,10 @@
     "dev": "vite --host 127.0.0.1 --port 5193 --strictPort",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 5193",
+    "lab": "vite --host 127.0.0.1 --port 5180 --strictPort",
     "pop": "node scripts/pop.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "labtest": "node scripts/lab.mjs",
     "diag": "node scripts/diag.mjs"
   },
   "dependencies": {

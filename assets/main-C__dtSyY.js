@@ -1,4 +1,4 @@
-import{l as N,d as T,P as q,S as E,C as M,b as O,a as $,s as L}from"./ControlPanel-DQTRqC0u.js";class j{constructor({scene:s}){this.scene=s,this.hidden=!0,this.root=document.createElement("div"),this.root.className="ff-perf hidden",this.root.innerHTML=`
+import{l as N,d as T,P as q,S as E,C as M,b as O,a as $,s as L}from"./ControlPanel-DF35CFAx.js";class j{constructor({scene:s}){this.scene=s,this.hidden=!0,this.root=document.createElement("div"),this.root.className="ff-perf hidden",this.root.innerHTML=`
       <span class="ff-perf-key">fps</span><span class="ff-perf-val" data-k="fps">—</span>
       <span class="ff-perf-key">tris</span><span class="ff-perf-val" data-k="tris">—</span>
       <span class="ff-perf-key">draws</span><span class="ff-perf-val" data-k="calls">—</span>

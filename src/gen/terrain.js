@@ -260,22 +260,34 @@ export function generateIsland(opts) {
       vol.channel[idx] = (hasChannel && channelAt(x, z).field > 0.30) ? 1 : 0;
       const st = shoreType(x, z);
 
+      // Snow line tied to the existing "Conifer line" knob (its hint already
+      // says "above = winter snow caps"). Mapped BELOW the raw frac + an
+      // organic altitude jitter so caps actually form with a ragged edge,
+      // never a contour ring. Altitude/slope only → does NOT re-couple
+      // material to season, so the neapolitan-banding fix is preserved.
+      const snowJit = (fbm2(x * 0.02 + 5.1, z * 0.02 - 2.7,
+        { seed: seed + 88, octaves: 3, warp: 0.4 }) - 0.5) * 0.13;
+      const snowLine = (seasons.coniferEnd ?? 0.84) * 0.78;
+      const aS = a + snowJit;
+
       // Material is DECOUPLED from season — driven by slope / height / shore.
       // So grass meets sand directly (no forced autumn ring → no neapolitan);
       // season only re-tints grass + selects trees (done in the mesher).
       let mat;
       if (!isLand) {
         mat = MAT.SEAFLOOR;
+      } else if (aS > snowLine + 0.05) {
+        mat = MAT.SNOW;                                     // summit cap — wins even on steep
       } else if (slope > 0.92) {
-        mat = MAT.ROCK;                                     // any steep face = cliff/rock
+        mat = MAT.ROCK;                                     // sheer faces below the cap
       } else if (h <= seaLevel + beachWidth * 1.25 && slope < 0.34) {
-        mat = MAT.SAND;                                     // flat & low = wide beach
+        mat = MAT.SAND;                                     // flat & low = wide beach (preserved)
       } else if (h <= seaLevel + beachWidth * 0.9 && st < 0.34) {
         mat = MAT.ROCK;                                     // rocky shore on cliff stretches
-      } else if (a > 0.82) {
-        mat = MAT.SNOW;                                     // snow cap = pure altitude+exposure
+      } else if (aS > snowLine - 0.06 && slope < 0.8) {
+        mat = MAT.GRASSY_SNOW;                              // frosty fringe (ragged, not a ring)
       } else if (a > 0.66) {
-        mat = MAT.ROCK;                                     // bare upper massif (thin band)
+        mat = MAT.ROCK;                                     // bare upper crags
       } else if (a > 0.5 && slope > 0.62) {
         mat = MAT.DIRT;                                     // scree / talus
       } else {

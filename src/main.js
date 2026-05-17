@@ -8,6 +8,7 @@ import { ControlPanel } from './ui/ControlPanel.js';
 import { PerfOverlay } from './ui/PerfOverlay.js';
 import { loadSticky, setSticky, clearSticky } from './config/sticky.js';
 import { loadPresets, savePresetToDisk } from './config/presets.js';
+import { Experimental, EXPERIMENTAL } from './experimental/experimental.js';
 
 const canvasContainer = document.getElementById('canvas-container');
 const uiRoot = document.getElementById('ui-root');
@@ -158,20 +159,15 @@ uiRoot.appendChild(panel.root);
 const perf = new PerfOverlay({ scene });
 uiRoot.appendChild(perf.root);
 
+// Experimental sandbox — segregated; inert until a flag is flipped. Always
+// constructed (so "baseline" can allOff) but only mounted when EXPERIMENTAL.
+const experimental = new Experimental();
+if (EXPERIMENTAL) uiRoot.appendChild(experimental.root);
+
 scene.start();
 
 function handleAction(action) {
   switch (action) {
-    case 'newisland':
-      // New seed + a little look-magic. Honours stickiness: a pinned seed
-      // makes this a no-op (the pin's whole promise).
-      if (stickyPaths.has('voxel.seed')) {
-        panel.flashStatus('seed is sticky ◆', 'ok');
-      } else {
-        newIsland();
-        panel.flashStatus('new island', 'ok');
-      }
-      break;
     case 'default':
       clearSticky();
       stickyPaths.clear();
@@ -181,20 +177,18 @@ function handleAction(action) {
       panel.refreshSticky();
       panel.flashStatus('default · sticky cleared', 'ok');
       break;
-    case 'factory':
-      // Safety net: a guaranteed hard reset to the built-in defaults, and
-      // restore slot 1 (the default preset) to those values — in case the
-      // user's saved default got clobbered.
-      clearSticky();
-      stickyPaths.clear();
-      for (const k of Object.keys(stickyMap)) delete stickyMap[k];
-      store.reset();
-      scene.regenerate();
-      panel.refreshSticky();
-      presets['A1'] = capturePreset();
-      savePresetToDisk('A1', presets['A1']);
+    case 'baseline':
+      // Experimentation safety net: kill every experimental effect, then snap
+      // back to the golden A1 preset (or built-in defaults if A1 is absent).
+      experimental.allOff();
+      if (presets['A1'] && presets['A1'].params) {
+        applyPreset(presets['A1']);
+      } else {
+        store.reset();
+        scene.regenerate();
+      }
       panel.refreshPresets();
-      panel.flashStatus('factory reset · A1 restored', 'ok');
+      panel.flashStatus('baseline · experimental off', 'ok');
       break;
     case 'random':
       randomize();
@@ -206,20 +200,6 @@ function handleAction(action) {
 }
 
 function rnd(min, max) { return min + Math.random() * (max - min); }
-
-// "new island" — fresh seed plus a lighter-handed reroll than full random:
-// shifts the light, season drift and terrain character so each island feels
-// distinct, but stays in tasteful daylight ranges. Never writes a sticky param.
-function newIsland() {
-  const set = (p, v) => { if (!stickyPaths.has(p)) store.set(p, v); };
-  set('voxel.seed', 1 + ((Math.random() * 99998) | 0));
-  set('sun.elevationDeg', rnd(18, 52));
-  set('sun.azimuthDeg', rnd(-180, 180));
-  set('seasons.sweepDeg', rnd(-180, 180));
-  set('island.warp', rnd(0.65, 1.15));
-  set('island.ridge', rnd(0.5, 0.95));
-  scene.regenerate();                             // immediate, single rebuild
-}
 
 // randomize NEVER writes a sticky param.
 function randomize() {
@@ -257,9 +237,14 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (k === 'h' || k === 'b') { event.preventDefault(); blur(); panel.toggle(); }
-  else if (k === 'escape') { event.preventDefault(); blur(); if (!panel.collapsed) panel.toggle(); }
+  else if (k === 'escape') {
+    event.preventDefault(); blur();
+    if (!panel.collapsed) panel.toggle();
+    if (EXPERIMENTAL && !experimental.collapsed) experimental.toggle();
+  }
+  else if (k === 'e') { if (EXPERIMENTAL) { event.preventDefault(); blur(); experimental.toggle(); } }
   else if (k === 'f') { event.preventDefault(); blur(); perf.toggle(); }
   else if (k === 'r') { event.preventDefault(); blur(); randomize(); panel.flashStatus('rolled', 'ok'); }
 });
 
-window.isometric = { scene, store, panel, perf, sticky, presets: presetApi };
+window.isometric = { scene, store, panel, perf, sticky, presets: presetApi, experimental };

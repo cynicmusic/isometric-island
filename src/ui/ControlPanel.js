@@ -35,9 +35,10 @@ export class ControlPanel {
     this.hints.className = 'ff-hints';
     this.hints.innerHTML = `
       <kbd>WASD</kbd> fly
-      <kbd>Q/E</kbd> down/up
+      <kbd>Q/↑↓</kbd> up·down
       <kbd>drag</kbd> look
       <kbd>H</kbd> panel
+      <kbd>E</kbd> exp
       <kbd>F</kbd> fps
     `;
     document.body.appendChild(this.hints);
@@ -307,30 +308,18 @@ export class ControlPanel {
     }
     footer.appendChild(grid);
 
-    // "new island" keeps its signature horizontal gradient strip. New seed
-    // plus a little look-magic (handled in main).
-    const cycle = document.createElement('button');
-    cycle.className = 'ff-btn ff-cycle';
-    cycle.dataset.action = 'newisland';
-    cycle.innerHTML = `
-      <span class="ff-cycle-label">new island</span>
-      <span class="ff-cycle-strip"></span>
-    `;
-    footer.appendChild(cycle);
-
-    // default · random · factory. "factory" is the safety net: it forces a
-    // hard reset to the hard-coded defaults and restores slot 1, in case the
-    // user's default preset gets clobbered.
+    // default · random · baseline. "baseline" is the experimentation safety
+    // net: kill all experimental effects + snap back to the golden A1 preset.
     const trio = document.createElement('div');
     trio.className = 'ff-btn-trio';
     trio.innerHTML = `
       <button class="ff-btn ff-mini" data-action="default">default</button>
       <button class="ff-btn ff-mini" data-action="random">random</button>
-      <button class="ff-btn ff-mini" data-action="factory" title="hard reset to built-in defaults + restore slot 1">factory</button>
+      <button class="ff-btn ff-mini" data-action="baseline" title="all experimental FX off + snap to golden A1">baseline</button>
     `;
     footer.appendChild(trio);
 
-    [cycle, ...trio.querySelectorAll('button[data-action]')].forEach((btn) => {
+    trio.querySelectorAll('button[data-action]').forEach((btn) => {
       btn.addEventListener('click', () => this.onAction(btn.dataset.action));
     });
 

@@ -28,7 +28,8 @@ const ORTHO = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const GOD_MARCH = `
   vec3 godMarch(vec2 vUv) {
     if (uGod < 0.001 || uSunVis <= 0.001) return vec3(0.0);
-    vec2 delta = (uSunUV - vUv) / float(uGodN) * uGodDensity;
+    vec2 rayUV = clamp(uSunUV, vec2(0.0), vec2(1.0));
+    vec2 delta = (rayUV - vUv) / float(uGodN) * uGodDensity;
     vec2 uv = vUv; float decay = 1.0; vec3 acc = vec3(0.0);
     for (int i = 0; i < 48; i++) {
       if (i >= uGodN) break;
@@ -38,14 +39,14 @@ const GOD_MARCH = `
       float lum = max(max(s.r, s.g), s.b);
       float rawSrc = max(0.0, lum - uGodThr) * inUv;
       float sky = smoothstep(0.999, 1.0, texture2D(tDepth, uv).x);
-      float nearSun = exp(-dot(uv - uSunUV, uv - uSunUV) * 5.5);
+      float nearSun = exp(-dot(uv - rayUV, uv - rayUV) * 5.5);
       float cleanSrc = sky * nearSun * smoothstep(max(0.0, uGodThr - 0.28), 1.0, lum) * inUv;
-      float gm = mix(1.0, smoothstep(uSunUV.y - 0.30, uSunUV.y + 0.04, uv.y), uGodHorizon);
+      float gm = mix(1.0, smoothstep(rayUV.y - 0.30, rayUV.y + 0.04, uv.y), uGodHorizon);
       acc += mix(s * rawSrc, vec3(cleanSrc), uGodSource) * gm * decay * uGodW;
       decay *= uGodDecay;
     }
     acc /= float(uGodN);
-    float radial = smoothstep(uGodRadius, 0.0, distance(vUv, uSunUV));
+    float radial = smoothstep(uGodRadius, 0.0, distance(vUv, rayUV));
     vec3 tint = mix(uHazeColor, uSunCol, uGodTint);
     float a = (acc.r + acc.g + acc.b) * 0.3333;
     return tint * a * uGodExp * uGod * radial * uSunVis;

@@ -1,12 +1,14 @@
 export class BuildConsole {
-  constructor({ parent = document.body, label = 'sim build' } = {}) {
+  constructor({ parent = document.body, label = 'sim build', settleMs = 900 } = {}) {
     this.label = label;
+    this.settleMs = settleMs;
     this._lines = [];
     this._active = false;
     this._count = 0;
     this._total = 1;
     this._t0 = performance.now();
     this._last = this._t0;
+    this._hideTimer = null;
 
     this.root = document.createElement('div');
     this.root.className = 'iso-build-console';
@@ -29,6 +31,10 @@ export class BuildConsole {
   }
 
   start(label = this.label, total = 8) {
+    if (this._hideTimer) {
+      clearTimeout(this._hideTimer);
+      this._hideTimer = null;
+    }
     this.label = label;
     this._active = true;
     this._count = 0;
@@ -36,7 +42,7 @@ export class BuildConsole {
     this._t0 = performance.now();
     this._last = this._t0;
     this._lines = [];
-    this.root.classList.add('active');
+    this.root.classList.add('visible', 'active');
     this.step('start');
   }
 
@@ -58,6 +64,10 @@ export class BuildConsole {
     this._count = this._total;
     this.root.classList.remove('active');
     this._render();
+    this._hideTimer = setTimeout(() => {
+      this.root.classList.remove('visible');
+      this._hideTimer = null;
+    }, this.settleMs);
   }
 
   _render() {
@@ -76,5 +86,6 @@ export class BuildConsole {
     this.timeEl.textContent = 'idle';
     this.barEl.style.transform = 'scaleX(0.04)';
     this.linesEl.textContent = 'waiting';
+    this.root.classList.remove('visible', 'active');
   }
 }

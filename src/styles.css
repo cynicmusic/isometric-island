@@ -59,8 +59,13 @@ html, body {
   letter-spacing: 0;
   pointer-events: none;
   user-select: none;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 180ms ease, background 160ms ease, transform 180ms ease;
+}
+.iso-build-console.visible {
   opacity: 0.48;
-  transition: opacity 160ms ease, background 160ms ease;
+  transform: translateY(0);
 }
 .iso-build-console.active {
   opacity: 0.72;

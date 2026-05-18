@@ -6,6 +6,7 @@ import { schema, sectionOrder } from './config/paramSchema.js';
 import { defaultParams } from './config/defaults.js';
 import { ControlPanel } from './ui/ControlPanel.js';
 import { PerfOverlay } from './ui/PerfOverlay.js';
+import { TreeCensus } from './ui/TreeCensus.js';
 import { BuildConsole } from './ui/BuildConsole.js';
 import { loadSticky, setSticky, clearSticky } from './config/sticky.js';
 import { loadPresets, savePresetToDisk } from './config/presets.js';
@@ -160,6 +161,9 @@ uiRoot.appendChild(panel.root);
 const perf = new PerfOverlay({ scene });
 uiRoot.appendChild(perf.root);
 
+const census = new TreeCensus({ scene });   // per-species planted counts (T)
+uiRoot.appendChild(census.root);
+
 scene.start();
 
 function handleAction(action) {
@@ -246,7 +250,8 @@ window.addEventListener('keydown', (event) => {
     if (!panel.collapsed) panel.toggle();
   }
   else if (k === 'f') { event.preventDefault(); blur(); perf.toggle(); }
+  else if (k === 't') { event.preventDefault(); blur(); census.toggle(); }
   else if (k === 'r') { event.preventDefault(); blur(); randomize(); panel.flashStatus('rolled', 'ok'); }
 });
 
-window.isometric = { scene, store, panel, perf, sticky, presets: presetApi };
+window.isometric = { scene, store, panel, perf, census, sticky, presets: presetApi };

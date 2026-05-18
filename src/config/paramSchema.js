@@ -109,6 +109,17 @@ export const schema = {
     },
   },
 
+  // Tree population. Just palm count for now (perf-test knob) — other
+  // species get their own sliders later. Drives Scene._plantTrees.
+  tree: {
+    label: 'tree',
+    icon: '🌴',
+    blurb: 'grove population — palms (more sliders later)',
+    fields: {
+      palmCount: { type: 'int', label: 'Palm count', min: 0, max: 512, step: 1, default: 56, hint: 'palms massed on the fairway/courseway · raise to stress-test' },
+    },
+  },
+
   render: {
     label: 'render',
     icon: '◯',
@@ -144,4 +155,4 @@ export const schema = {
   },
 };
 
-export const sectionOrder = ['sun', 'atmosphere', 'lighting', 'voxel', 'island', 'seasons', 'water', 'render', 'godrays'];
+export const sectionOrder = ['sun', 'atmosphere', 'lighting', 'voxel', 'island', 'seasons', 'water', 'tree', 'render', 'godrays'];

@@ -126,6 +126,7 @@ export class Scene {
         bunkerDensity: s.get('seasons.bunkerDensity'),
         bunkerSize: s.get('seasons.bunkerSize'),
       },
+      palmCount: s.get('tree.palmCount') | 0,
     };
     opts.maxHeight = opts.lowland + opts.massif;   // derived; used by shadow cam + tree planting
     this.loader?.step('params', `seed=${opts.seed} res=${opts.resolution}`);
@@ -173,44 +174,64 @@ export class Scene {
   _plantTrees(vol, opts) {
     this.treeGroup.clear();
     const rand = mulberry32((opts.seed * 2654435761) >>> 0);
-    const kindForCell = (i, j) => {
-      const idx = vol.idx(i, j);
-      const season = vol.season[idx];
+    const counts = { palm: 0, summer: 0, autumn: 0, conifer: 0, winter: 0 };
+
+    const inBand = (idx) => {
+      if (!vol.land[idx]) return false;
       const m = vol.material[idx];
+      if (m === MAT.ROCK || m === MAT.SEAFLOOR) return false;
       const y = vol.heightVox[idx] * vol.vstep;
-      if (m === MAT.SAND && season <= SEASON.AUTUMN && rand() > 0.4) return 'palm';
+      return y >= opts.seaLevel + 0.4 && y <= opts.seaLevel + opts.maxHeight * 0.82;
+    };
+    const place = (kind, i, j, idx) => {
+      const tree = makeTree(kind, ((rand() * 1e9) | 0) ^ idx);
+      const y = vol.heightVox[idx] * vol.vstep;
+      const [wx, wz] = vol.cellToWorld(i, j);
+      tree.position.set(wx, y - 0.5, wz);
+      tree.scale.setScalar(0.85 + rand() * 0.5);
+      tree.rotation.y = rand() * Math.PI * 2;
+      this.treeGroup.add(tree);
+      counts[kind] = (counts[kind] || 0) + 1;
+    };
+
+    // ---- palms: explicit count (tree.palmCount, up to 512) — they
+    // concentrate on the fairway / courseway and beach (perf-test knob).
+    const palmTarget = Math.max(0, Math.min(512, opts.palmCount | 0));
+    let palms = 0, guard = 0;
+    const palmCap = palmTarget * 60 + 400;
+    while (palms < palmTarget && guard < palmCap) {
+      guard++;
+      const i = (rand() * vol.res) | 0, j = (rand() * vol.res) | 0;
+      const idx = vol.idx(i, j);
+      if (!inBand(idx)) continue;
+      const m = vol.material[idx];
+      if (!(m === MAT.FAIRWAY || m === MAT.SAND) && rand() > 0.30) continue;  // bias to greens/beach
+      place('palm', i, j, idx);
+      palms++;
+    }
+
+    // ---- other species: modest fixed scatter for now (their own sliders
+    // come later — this pass is palms only).
+    const otherKind = (idx) => {
+      const season = vol.season[idx];
       if (season === SEASON.WINTER) return rand() > 0.55 ? 'conifer' : 'winter';
       if (season === SEASON.CONIFER) return 'conifer';
       if (season === SEASON.AUTUMN) return 'autumn';
-      return rand() > 0.18 ? 'summer' : 'palm';
+      return 'summer';
     };
-
-    // Guarantee one of each, then scatter.
-    const want = ['palm', 'summer', 'autumn', 'conifer', 'winter'];
-    let placed = 0;
-    const target = 90;
-    let guard = 0;
-    while (placed < target && guard < target * 40) {
+    const otherTarget = 34;
+    let others = 0; guard = 0;
+    while (others < otherTarget && guard < otherTarget * 40) {
       guard++;
-      const i = (rand() * vol.res) | 0;
-      const j = (rand() * vol.res) | 0;
+      const i = (rand() * vol.res) | 0, j = (rand() * vol.res) | 0;
       const idx = vol.idx(i, j);
-      if (!vol.land[idx]) continue;
-      const m = vol.material[idx];
-      if (m === MAT.ROCK || m === MAT.SEAFLOOR) continue;
-      const y = vol.heightVox[idx] * vol.vstep;
-      if (y < opts.seaLevel + 0.4 || y > opts.seaLevel + opts.maxHeight * 0.82) continue;
-      const kind = placed < want.length ? want[placed] : kindForCell(i, j);
-      const tree = makeTree(kind, ((rand() * 1e9) | 0) ^ idx);
-      const [wx, wz] = vol.cellToWorld(i, j);
-      const sc = 0.85 + rand() * 0.5;
-      tree.position.set(wx, y - 0.5, wz);
-      tree.scale.setScalar(sc);
-      tree.rotation.y = rand() * Math.PI * 2;
-      this.treeGroup.add(tree);
-      placed++;
+      if (!inBand(idx)) continue;
+      place(otherKind(idx), i, j, idx);
+      others++;
     }
-    this.treeCount = placed;
+
+    this.treeCount = palms + others;
+    this.treeCounts = counts;          // per-species tally → TreeCensus panel
   }
 
   // ---- params ----
@@ -299,7 +320,7 @@ export class Scene {
       this._applyAll();
     }
     if (p === '*' || p.startsWith('island.') || p.startsWith('voxel.') || p.startsWith('seasons.') ||
-        p === 'water.seaLevel' || p === 'water.floorDepth') {
+        p.startsWith('tree.') || p === 'water.seaLevel' || p === 'water.floorDepth') {
       this._scheduleRegen();
     }
     if (this.sea) {
@@ -462,8 +483,23 @@ export class Scene {
       this.skyViewLUT.render(this.renderer);
       if (this._skyDirty) { this._syncHorizonFog(); this._skyDirty = false; }
 
+      this._swayTrees();
       this.postfx.render(this.scene, this.camera, this._fxParams());
     };
     tick();
+  }
+
+  // Baked palm sway — no panel control (the palm is user-locked); the wind
+  // character rides in each group's userData.sway (speed locked 0.42). Only
+  // palm groups carry it; everything else is skipped. ≤~90 trees → trivial.
+  _swayTrees() {
+    const t = this.elapsed;
+    for (const g of this.treeGroup.children) {
+      const s = g.userData && g.userData.sway;
+      if (!s) continue;
+      const a = Math.sin(t * s.speed + s.phase) * s.amp;
+      if (s.crown) { s.crown.rotation.z = a; s.crown.rotation.x = a * 0.5; }
+      g.rotation.z = a * 0.18;
+    }
   }
 }

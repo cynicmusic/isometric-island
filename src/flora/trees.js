@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32 } from '../gen/noise.js';
 import { TREE, mixRgb } from '../gen/palette.js';
+import { makePalm } from './palmReal.js';   // re-integrated workshop palm
 
 const _box = new THREE.BoxGeometry(1, 1, 1);
 const _cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 6);
@@ -187,7 +188,9 @@ function broadleaf(rand, season) {
 export function makeTree(kind, seed) {
   const rand = mulberry32(seed >>> 0);
   switch (kind) {
-    case 'palm': return palm(rand);
+    // palm is now the locked, swept workshop palm (PROCGEN §1.4/§1.5).
+    // The old box `palm(rand)` below is retired (kept only for reference).
+    case 'palm': return makePalm(seed);
     case 'conifer': return conifer(rand);
     case 'autumn': return broadleaf(rand, 'autumn');
     case 'winter': return broadleaf(rand, 'winter');

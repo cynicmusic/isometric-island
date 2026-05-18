@@ -28,7 +28,7 @@ Discipline:
 - [x] Mutate sun elevation/azimuth, camera, god-ray reach/density/decay/source/samples/resScale/sharp.
 - [x] Capture about 40 PNG candidates that visibly fan or shaft.
 - [x] Record the exact params/camera for each PNG.
-- [ ] Build and publish final state.
+- [x] Build and publish final state.
 
 ## Notes To Discuss
 

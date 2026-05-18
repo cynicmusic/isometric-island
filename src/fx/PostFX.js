@@ -26,30 +26,67 @@ const ORTHO = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 // screen [0,1]; it reads the FULL-res scene colour but is invoked once per
 // low-res god pixel — that is the "downsample".
 const GOD_MARCH = `
+  float godInUv(vec2 uv) {
+    return step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+  }
+
+  float godLum(vec3 c) {
+    return max(max(c.r, c.g), c.b);
+  }
+
+  float godSky(vec2 uv) {
+    return smoothstep(0.999, 1.0, texture2D(tDepth, uv).x) * godInUv(uv);
+  }
+
+  float godEdge(vec2 uv) {
+    float sky = godSky(uv);
+    vec2 px = uGodTexel * max(0.35, uGodEdgeWidth);
+    float e = 0.0;
+    e = max(e, abs(sky - godSky(uv + vec2( px.x, 0.0))));
+    e = max(e, abs(sky - godSky(uv + vec2(-px.x, 0.0))));
+    e = max(e, abs(sky - godSky(uv + vec2(0.0,  px.y))));
+    e = max(e, abs(sky - godSky(uv + vec2(0.0, -px.y))));
+    return sky * e * uGodEdgeGain;
+  }
+
+  void godSourceFields(vec2 uv, vec2 rayUV, out vec3 src, out float baseScalar, out float edgeScalar) {
+    float inUv = godInUv(uv);
+    vec3 s = texture2D(tScene, uv).rgb;
+    float lum = godLum(s);
+    float rawSrc = max(0.0, lum - uGodThr) * inUv;
+    float sky = godSky(uv);
+    float nearSun = exp(-dot(uv - rayUV, uv - rayUV) * 5.5);
+    float cleanSrc = sky * nearSun * smoothstep(max(0.0, uGodThr - 0.28), 1.0, lum) * inUv;
+    vec3 baseSrc = mix(s * rawSrc, vec3(cleanSrc), uGodSource);
+    baseScalar = max(max(baseSrc.r, baseSrc.g), baseSrc.b);
+    edgeScalar = godEdge(uv) * nearSun;
+    src = mix(baseSrc, vec3(edgeScalar), uGodEdgeSource);
+  }
+
   vec3 godMarch(vec2 vUv) {
-    if (uGod < 0.001 || uSunVis <= 0.001) return vec3(0.0);
+    if ((uGod < 0.001 && uGodDebug < 0.5) || uSunVis <= 0.001) return vec3(0.0);
     vec2 rayUV = clamp(uSunUV, vec2(0.0), vec2(1.0));
+    vec3 debugSrc; float debugBase; float debugEdge;
+    godSourceFields(vUv, rayUV, debugSrc, debugBase, debugEdge);
+    if (uGodDebug > 0.5 && uGodDebug < 1.5) return vec3(debugBase) * uGodDebugGain;
+    if (uGodDebug > 1.5 && uGodDebug < 2.5) return vec3(debugEdge) * uGodDebugGain;
+
     vec2 delta = (rayUV - vUv) / float(uGodN) * uGodDensity;
     vec2 uv = vUv; float decay = 1.0; vec3 acc = vec3(0.0);
     for (int i = 0; i < 48; i++) {
       if (i >= uGodN) break;
       uv += delta;
-      float inUv = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
-      vec3 s = texture2D(tScene, uv).rgb;
-      float lum = max(max(s.r, s.g), s.b);
-      float rawSrc = max(0.0, lum - uGodThr) * inUv;
-      float sky = smoothstep(0.999, 1.0, texture2D(tDepth, uv).x);
-      float nearSun = exp(-dot(uv - rayUV, uv - rayUV) * 5.5);
-      float cleanSrc = sky * nearSun * smoothstep(max(0.0, uGodThr - 0.28), 1.0, lum) * inUv;
+      vec3 src; float baseScalar; float edgeScalar;
+      godSourceFields(uv, rayUV, src, baseScalar, edgeScalar);
       float gm = mix(1.0, smoothstep(rayUV.y - 0.30, rayUV.y + 0.04, uv.y), uGodHorizon);
-      acc += mix(s * rawSrc, vec3(cleanSrc), uGodSource) * gm * decay * uGodW;
+      acc += src * gm * decay * uGodW;
       decay *= uGodDecay;
     }
     acc /= float(uGodN);
     float radial = smoothstep(uGodRadius, 0.0, distance(vUv, rayUV));
     vec3 tint = mix(uHazeColor, uSunCol, uGodTint);
     float a = (acc.r + acc.g + acc.b) * 0.3333;
-    return tint * a * uGodExp * uGod * radial * uSunVis;
+    return tint * a * uGodExp * max(uGod, step(2.5, uGodDebug)) * radial * uSunVis;
   }`;
 
 const GOD_UNIFORMS = () => ({
@@ -69,6 +106,12 @@ const GOD_UNIFORMS = () => ({
   uGodRadius: { value: 1.1 },
   uGodTint: { value: 0.5 },
   uGodSource: { value: 0.0 },
+  uGodEdgeSource: { value: 0.0 },
+  uGodEdgeWidth: { value: 1.2 },
+  uGodEdgeGain: { value: 1.0 },
+  uGodTexel: { value: new THREE.Vector2(1 / 256, 1 / 144) },
+  uGodDebug: { value: 0 },
+  uGodDebugGain: { value: 1 },
 });
 
 export class PostFX {
@@ -127,9 +170,10 @@ export class PostFX {
       fragmentShader: `
         varying vec2 vUv;
         uniform sampler2D tScene, tDepth;
-        uniform vec2 uSunUV; uniform float uSunVis;
+        uniform vec2 uSunUV, uGodTexel; uniform float uSunVis;
         uniform vec3 uHazeColor, uSunCol;
         uniform float uGod, uGodDensity, uGodDecay, uGodW, uGodExp, uGodThr, uGodHorizon, uGodRadius, uGodTint, uGodSource;
+        uniform float uGodEdgeSource, uGodEdgeWidth, uGodEdgeGain, uGodDebug, uGodDebugGain;
         uniform int uGodN;
         ${GOD_MARCH}
         void main(){ gl_FragColor = vec4(godMarch(vUv), 1.0); }`,
@@ -158,6 +202,31 @@ export class PostFX {
         }`,
       blending: THREE.AdditiveBlending,
       transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    });
+
+    // Fullscreen god-buffer inspector for the lab workshop. It displays the
+    // low-res source/edge/ray target directly, so the source math can be tuned
+    // without the final scene hiding it.
+    this.debugMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tGod: { value: null },
+        uGodSharp: { value: 0 },
+        uGodTexel: { value: new THREE.Vector2() },
+      },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }',
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform sampler2D tGod;
+        uniform float uGodSharp;
+        uniform vec2 uGodTexel;
+        void main(){
+          vec2 g = (floor(vUv / uGodTexel) + 0.5) * uGodTexel;
+          vec2 guv = mix(vUv, g, uGodSharp);
+          gl_FragColor = vec4(texture2D(tGod, guv).rgb, 1.0);
+        }`,
       depthTest: false,
       depthWrite: false,
       toneMapped: false,
@@ -217,10 +286,12 @@ export class PostFX {
     this._brightQuad = new THREE.Mesh(QUAD, this.brightMat);
     this._godQuad = new THREE.Mesh(QUAD, this.godMat);
     this._overlayQuad = new THREE.Mesh(QUAD, this.overlayMat);
+    this._debugQuad = new THREE.Mesh(QUAD, this.debugMat);
     this._compQuad = new THREE.Mesh(QUAD, this.compMat);
     this._brightScene = new THREE.Scene().add(this._brightQuad);
     this._godScene = new THREE.Scene().add(this._godQuad);
     this._overlayScene = new THREE.Scene().add(this._overlayQuad);
+    this._debugScene = new THREE.Scene().add(this._debugQuad);
     this._compScene = new THREE.Scene().add(this._compQuad);
   }
 
@@ -238,6 +309,7 @@ export class PostFX {
     const gh = Math.max(1, (h * this._godScale) | 0);
     if (this.godRT.width !== gw || this.godRT.height !== gh) this.godRT.setSize(gw, gh);
     this.compMat.uniforms.uGodTexel.value.set(1 / gw, 1 / gh);
+    this.godMat.uniforms.uGodTexel.value.set(1 / gw, 1 / gh);
   }
 
   // p: { bloom, haze, hazeColor, sunCol, sunUV, sunVisible, god:{intensity,
@@ -247,7 +319,8 @@ export class PostFX {
     const bloom = p.bloom || 0, haze = p.haze || 0;
     const g = p.god || {};
     const sunFade = p.sunFade ?? (p.sunVisible ? 1 : 0);
-    const gOn = (g.intensity || 0) > 0 && sunFade > 0.001;
+    const gDebug = Math.max(0, Math.min(3, g.debugView ?? 0));
+    const gOn = ((g.intensity || 0) > 0 || gDebug > 0) && sunFade > 0.001;
     const r = this.renderer;
     const rayOnly = gOn && bloom <= 0 && haze <= 0;
     if (bloom <= 0 && haze <= 0 && !gOn) {     // golden bypass — no RT, no pass
@@ -297,8 +370,23 @@ export class PostFX {
       u.uGodRadius.value = g.radius ?? 1.1;
       u.uGodTint.value = g.tint ?? 0.5;
       u.uGodSource.value = Math.max(0, Math.min(1, g.source ?? 0));
+      u.uGodEdgeSource.value = Math.max(0, Math.min(1, g.edgeSource ?? 0));
+      u.uGodEdgeWidth.value = Math.max(0.35, Math.min(8, g.edgeWidth ?? 1.2));
+      u.uGodEdgeGain.value = Math.max(0, Math.min(12, g.edgeGain ?? 1));
+      u.uGodDebug.value = gDebug;
+      u.uGodDebugGain.value = Math.max(0.1, Math.min(20, g.debugGain ?? 1));
       r.setRenderTarget(this.godRT);
       r.render(this._godScene, ORTHO);
+    }
+
+    if (gDebug > 0) {
+      const d = this.debugMat.uniforms;
+      d.tGod.value = this.godRT.texture;
+      d.uGodSharp.value = Math.max(0, Math.min(1, g.sharp ?? 0));
+      d.uGodTexel.value.copy(this.compMat.uniforms.uGodTexel.value);
+      r.setRenderTarget(null);
+      r.render(this._debugScene, ORTHO);
+      return;
     }
 
     if (rayOnly) {
@@ -346,6 +434,6 @@ export class PostFX {
 
   dispose() {
     this.sceneRT.dispose(); this.bloomRT.dispose(); this.godRT.dispose();
-    this.brightMat.dispose(); this.godMat.dispose(); this.overlayMat.dispose(); this.compMat.dispose();
+    this.brightMat.dispose(); this.godMat.dispose(); this.overlayMat.dispose(); this.debugMat.dispose(); this.compMat.dispose();
   }
 }

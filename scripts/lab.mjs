@@ -132,6 +132,11 @@ for (let i = 0; i < 40; i++) {
       samples: pick([12, 16, 20, 24, 32]),
       resScale: pick([0.18, 0.25, 0.32, 0.45, 0.6]),
       sharp: pick([0.0, 0.15, 0.25, 0.45, 0.75]),
+      edgeSource: pick([0, 0.25, 0.5, 0.75, 1]),
+      edgeWidth: rnd(0.7, 4.5),
+      edgeGain: rnd(0.7, 7.5),
+      debugView: 0,
+      debugGain: 1,
     },
     render: { exposure: rnd(0.38, 1.15), fogDensity: rnd(0.00018, 0.0011) },
     lighting: {

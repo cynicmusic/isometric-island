@@ -6,7 +6,7 @@ import '../styles.css';
 import '../ui/panel.css';
 import { Scene } from '../core/Scene.js';
 import { ParamStore } from '../state/ParamStore.js';
-import { schema, sectionOrder } from '../config/paramSchema.js';
+import { schema as simSchema, sectionOrder } from '../config/paramSchema.js';
 import { defaultParams } from '../config/defaults.js';
 import { ControlPanel } from '../ui/ControlPanel.js';
 import { PerfOverlay } from '../ui/PerfOverlay.js';
@@ -15,6 +15,25 @@ import { loadPresets } from '../config/presets.js';
 
 const canvasContainer = document.getElementById('canvas-container');
 const uiRoot = document.getElementById('ui-root');
+
+// Lab-only god-ray workshop controls. The shader accepts these with neutral
+// defaults, but the public sim panel stays clean until an experiment earns it.
+const schema = structuredClone(simSchema);
+Object.assign(schema.godrays.fields, {
+  edgeSource: { type: 'float', label: 'Edge source', min: 0, max: 1, step: 0.02, default: 0, hint: '0 = current source · 1 = sky/occluder ridge transport' },
+  edgeWidth: { type: 'float', label: 'Edge width', min: 0.35, max: 8, step: 0.05, default: 1.2, hint: 'neighbor distance in god buffer texels' },
+  edgeGain: { type: 'float', label: 'Edge gain', min: 0, max: 12, step: 0.05, default: 1, hint: 'how hard ridge edges emit rays' },
+  debugView: { type: 'int', label: 'Debug view', min: 0, max: 3, step: 1, default: 0, hint: '0 final · 1 source · 2 edge · 3 rays only' },
+  debugGain: { type: 'float', label: 'Debug gain', min: 0.1, max: 20, step: 0.1, default: 1, hint: 'viewer gain for source/edge/ray debug buffers' },
+});
+
+const labGodrayDefaults = {
+  edgeSource: 0,
+  edgeWidth: 1.2,
+  edgeGain: 1,
+  debugView: 0,
+  debugGain: 1,
+};
 
 // ---- lab-local sticky params ----------------------------------------------
 const stickyMap = {};
@@ -26,6 +45,13 @@ function setAt(obj, path, value) {
   let n = obj;
   for (const p of parts) n = (n[p] ??= {});
   n[last] = value;
+}
+
+function ensureLabGodrayParams(force = false) {
+  for (const [key, value] of Object.entries(labGodrayDefaults)) {
+    const path = `godrays.${key}`;
+    if (force || store.get(path) === undefined) store.set(path, value);
+  }
 }
 
 const presets = await loadPresets();
@@ -46,6 +72,9 @@ function deepMerge(target, source) {
 }
 
 const boot = structuredClone(defaultParams);
+for (const [key, value] of Object.entries(labGodrayDefaults)) {
+  setAt(boot, `godrays.${key}`, value);
+}
 if (bootPreset && bootPreset.params) {
   deepMerge(boot, bootPreset.params);
 } else if (!stickyPaths.has('voxel.seed')) {
@@ -79,6 +108,7 @@ const sticky = {
 function applyPreset(p) {
   if (!p || !p.params) return false;
   store.fromJSON(p.params);
+  ensureLabGodrayParams(false);
   scene.regenerate();
   if (p.cam) {
     scene.camera.position.fromArray(p.cam.p);
@@ -130,6 +160,7 @@ function handleAction(action) {
       stickyPaths.clear();
       for (const k of Object.keys(stickyMap)) delete stickyMap[k];
       store.reset();
+      ensureLabGodrayParams(true);
       scene.regenerate();
       panel.refreshSticky();
       panel.flashStatus('lab default · disk untouched', 'ok');

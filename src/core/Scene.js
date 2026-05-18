@@ -382,6 +382,11 @@ export class Scene {
       radius: gr.reach ?? 1.45, tint: gr.warmth ?? 0.5,
       resScale: gr.resScale ?? 0.25, sharp: gr.sharp ?? 0.25,
       source: gr.source ?? 1, compare: !!gr.compare,
+      edgeSource: gr.edgeSource ?? 0,
+      edgeWidth: gr.edgeWidth ?? 1.2,
+      edgeGain: gr.edgeGain ?? 1,
+      debugView: gr.debugView ?? 0,
+      debugGain: gr.debugGain ?? 1,
     } : { intensity: 0 };
     return {
       bloom: s.get('lighting.bloom') || 0,

@@ -144,20 +144,20 @@ Knobs:
 - `strokeJitter`.
 - `strokeWarmth`.
 
-### 4. 2.5D whisp ribbons
+### Removed: 2.5D whisp ribbons
 
-Use instanced transparent quads/ribbons in world-ish space near the sun-facing
-mountain silhouette. This echoes the fractal-fire/whisp success, but it is the
-least physically grounded and most likely to swim when the camera moves. Keep it
-as a late experiment, not step one.
+Do not inject transparent quads into this sim for god rays. It is a useful
+mental model for other effects, like smoke off a mountain, but it is the wrong
+tool for this workshop. Stay in shader/postprocess space unless we deliberately
+start a different sim.
 
 ## Recommended next build
 
 Implement step 1 first, lab-visible:
 
-1. Add an edge field inside the existing god-ray march, default off.
-2. Add a lab/schema knob `Edge source`.
-3. Add a debug source-view mode: final / source / edge / rays.
+1. Add an edge field inside the existing god-ray march, default off. Done.
+2. Add lab/schema knobs `Edge source`, `Edge width`, and `Edge gain`. Done.
+3. Add a debug source-view mode: final / source / edge / rays. Done.
 4. Re-run the four fixtures and regenerate a contact sheet.
 
 Success criteria:

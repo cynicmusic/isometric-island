@@ -167,3 +167,23 @@ Success criteria:
 - `godray-20-A2` fans farther without requiring blur.
 - `G` still toggles only the god-ray contribution.
 - No global tone or contrast mutation when intensity is zero.
+
+## Workshop finding: horizon slab
+
+The first edge-source pass could lock onto the flat sea/sky horizon. When that
+long horizontal edge was marched toward an offscreen or clamped sun, it produced
+a screen-wide rectangular band. That artifact is not useful ray texture; it is a
+bad source signal.
+
+Current guard:
+
+- edge emission now requires sky adjacent to closer foreground geometry, not
+  just any sky/non-sky depth transition.
+- laterally continuous edges are attenuated, so a long flat horizon line is
+  rejected while jagged mountain silhouettes can still survive.
+- edge math is skipped when `Edge source` is zero and the edge debug view is not
+  active.
+
+This makes `Edge source = 1` quieter, but it removes the poisonous horizon slab.
+The next tuning pass should recover strength from real silhouettes rather than
+letting the sea horizon emit.

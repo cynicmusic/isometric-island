@@ -38,15 +38,37 @@ const GOD_MARCH = `
     return smoothstep(0.999, 1.0, texture2D(tDepth, uv).x) * godInUv(uv);
   }
 
-  float godEdge(vec2 uv) {
+  float godForeground(vec2 uv) {
+    float inUv = godInUv(uv);
+    float depth = texture2D(tDepth, uv).x;
+    float sky = smoothstep(0.999, 1.0, depth);
+    float nearGeom = 1.0 - smoothstep(0.992, 0.9995, depth);
+    return (1.0 - sky) * nearGeom * inUv;
+  }
+
+  float godEdgeBase(vec2 uv) {
     float sky = godSky(uv);
     vec2 px = uGodTexel * max(0.35, uGodEdgeWidth);
-    float e = 0.0;
-    e = max(e, abs(sky - godSky(uv + vec2( px.x, 0.0))));
-    e = max(e, abs(sky - godSky(uv + vec2(-px.x, 0.0))));
-    e = max(e, abs(sky - godSky(uv + vec2(0.0,  px.y))));
-    e = max(e, abs(sky - godSky(uv + vec2(0.0, -px.y))));
-    return sky * e * uGodEdgeGain;
+    float fg = 0.0;
+    fg = max(fg, godForeground(uv + vec2( px.x, 0.0)));
+    fg = max(fg, godForeground(uv + vec2(-px.x, 0.0)));
+    fg = max(fg, godForeground(uv + vec2(0.0,  px.y)));
+    fg = max(fg, godForeground(uv + vec2(0.0, -px.y)));
+    return sky * fg;
+  }
+
+  float godEdge(vec2 uv) {
+    vec2 px = uGodTexel * max(0.35, uGodEdgeWidth);
+    float e = godEdgeBase(uv);
+    // A perfectly long horizontal horizon line is also a depth edge, but it
+    // transports into an ugly slab. Suppress laterally continuous edges and
+    // keep jagged/curved mountain silhouette fragments.
+    float lateral = 0.5 * (
+      godEdgeBase(uv + vec2(px.x * 6.0, 0.0)) +
+      godEdgeBase(uv - vec2(px.x * 6.0, 0.0))
+    );
+    float lineReject = 1.0 - smoothstep(0.35, 0.95, lateral);
+    return e * lineReject * uGodEdgeGain;
   }
 
   void godSourceFields(vec2 uv, vec2 rayUV, out vec3 src, out float baseScalar, out float edgeScalar) {
@@ -59,7 +81,10 @@ const GOD_MARCH = `
     float cleanSrc = sky * nearSun * smoothstep(max(0.0, uGodThr - 0.28), 1.0, lum) * inUv;
     vec3 baseSrc = mix(s * rawSrc, vec3(cleanSrc), uGodSource);
     baseScalar = max(max(baseSrc.r, baseSrc.g), baseSrc.b);
-    edgeScalar = godEdge(uv) * nearSun;
+    edgeScalar = 0.0;
+    if (uGodEdgeSource > 0.001 || (uGodDebug > 1.5 && uGodDebug < 2.5)) {
+      edgeScalar = godEdge(uv) * nearSun;
+    }
     src = mix(baseSrc, vec3(edgeScalar), uGodEdgeSource);
   }
 

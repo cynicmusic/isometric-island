@@ -13,21 +13,21 @@ Discipline:
 - [x] Preserve dev preset behavior through Vite middleware.
 - [x] Add static/published preset persistence through localStorage, so keyboard preset saves survive on GitHub Pages.
 - [x] Rename Sun glint UI label to Sun glint width.
-- [ ] Build, commit, push main, and deploy GitHub Pages.
+- [x] Build, commit, push main, and deploy GitHub Pages.
 
 ## Pass 2 — New Lab
 
-- [ ] Remove the current bespoke god-ray lab.
-- [ ] Replace `/lab/` with a sim-derived copy of the current app.
-- [ ] Disable preset saving in lab so tuning cannot corrupt main sim presets.
-- [ ] Keep preset loading, hotkeys, panel, camera, and render path 1:1 with the main sim.
+- [x] Remove the current bespoke god-ray lab.
+- [x] Replace `/lab/` with a sim-derived copy of the current app.
+- [x] Disable preset saving in lab so tuning cannot corrupt main sim presets.
+- [x] Keep preset loading, hotkeys, panel, camera, and render path 1:1 with the main sim.
 
 ## Pass 3 — God-Ray Search
 
-- [ ] Use saved A-H / 1-8 presets as seeds, especially purple/night/red compositions.
-- [ ] Mutate sun elevation/azimuth, camera, god-ray reach/density/decay/source/samples/resScale/sharp.
-- [ ] Capture about 40 PNG candidates that visibly fan or shaft.
-- [ ] Record the exact params/camera for each PNG.
+- [x] Use saved A-H / 1-8 presets as seeds, especially purple/night/red compositions.
+- [x] Mutate sun elevation/azimuth, camera, god-ray reach/density/decay/source/samples/resScale/sharp.
+- [x] Capture about 40 PNG candidates that visibly fan or shaft.
+- [x] Record the exact params/camera for each PNG.
 - [ ] Build and publish final state.
 
 ## Notes To Discuss

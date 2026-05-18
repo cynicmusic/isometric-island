@@ -20,9 +20,10 @@ import { PostFX } from '../fx/PostFX.js';
 const OBSERVER = new THREE.Vector3(0, PLANET.groundRadius + 0.35, 0);
 
 export class Scene {
-  constructor(container, store) {
+  constructor(container, store, options = {}) {
     this.container = container;
     this.store = store;
+    this.loader = options.loader || null;
     this.elapsed = 0;
     this.treeCount = 0;
     this._terrainDirty = false;
@@ -96,6 +97,7 @@ export class Scene {
     // An explicit regen supersedes any debounced one — prevents a second,
     // late rebuild (the "delayed fade redraw" / double island).
     if (this._regenTimer) { clearTimeout(this._regenTimer); this._regenTimer = null; }
+    this.loader?.start('island asset build', 8);
     const s = this.store;
     const opts = {
       seed: s.get('voxel.seed') | 0,
@@ -126,9 +128,11 @@ export class Scene {
       },
     };
     opts.maxHeight = opts.lowland + opts.massif;   // derived; used by shadow cam + tree planting
+    this.loader?.step('params', `seed=${opts.seed} res=${opts.resolution}`);
 
     const vol = generateIsland(opts);
     this.vol = vol;
+    this.loader?.step('terrain', `${vol.res}x${vol.res}`);
 
     // Size the shadow camera to the new island (sun sits at dir·6000).
     const r = opts.radius * 1.4;
@@ -137,12 +141,15 @@ export class Scene {
     sc.near = Math.max(50, 6000 - r - opts.maxHeight - 600);
     sc.far = 6000 + r + 600;
     sc.updateProjectionMatrix();
+    this.loader?.step('shadow bounds');
 
     // Island mesh.
     this.islandGroup.clear();
     if (this._islandMesh) this._islandMesh.geometry.dispose();
+    this.loader?.step('clear meshes');
     this._islandMesh = buildIslandMesh(vol, opts.seed);
     this.islandGroup.add(this._islandMesh);
+    this.loader?.step('island mesh', `${this._islandMesh.geometry.getAttribute('position')?.count || 0} verts`);
 
     // Sea (rebuilt sized to the new world).
     if (this.sea) this.scene.remove(this.sea.group);
@@ -156,8 +163,11 @@ export class Scene {
     });
     this.scene.add(this.sea.group);
     this._applyWaterLighting();          // fresh sea gets current sun + glint
+    this.loader?.step('sea');
 
     this._plantTrees(vol, opts);
+    this.loader?.step('trees', `${this.treeCount}`);
+    this.loader?.done('ready');
   }
 
   _plantTrees(vol, opts) {

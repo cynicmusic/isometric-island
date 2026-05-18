@@ -15,6 +15,28 @@ function migrate(map) {
   return out;
 }
 
+const STATIC_PRESETS_KEY = 'isometric-island.presets.v1';
+
+function readLocalPresets() {
+  try {
+    const raw = window.localStorage?.getItem(STATIC_PRESETS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalPreset(slot, preset) {
+  try {
+    const map = readLocalPresets();
+    map[String(slot)] = preset;
+    window.localStorage?.setItem(STATIC_PRESETS_KEY, JSON.stringify(map));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function loadPresets() {
   // Dev: the Vite middleware (only exists under the dev server). Always
   // answers, so a dev server never falls through to the baked snapshot. In a
@@ -36,14 +58,18 @@ export async function loadPresets() {
     const r = await fetch(url, { cache: 'no-cache' });
     if (r.ok) {
       const j = await r.json();
-      return migrate(j && typeof j === 'object' ? (j.presets || j) : {});
+      const baked = j && typeof j === 'object' ? (j.presets || j) : {};
+      return migrate({ ...baked, ...readLocalPresets() });
     }
   } catch { /* no baked snapshot */ }
-  return {};
+  return migrate(readLocalPresets());
 }
 
 export async function savePresetToDisk(slot, preset) {
-  if (!import.meta.env.DEV) return;   // no middleware in a static build
+  if (!import.meta.env.DEV) {
+    writeLocalPreset(slot, preset);
+    return;
+  }
   try {
     await fetch('/__iso-presets', {
       method: 'POST',

@@ -42,6 +42,71 @@ html, body {
 #ui-root { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
 #ui-root > * { pointer-events: auto; }
 
+.iso-build-console {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  width: min(430px, calc(100vw - 28px));
+  padding: 7px 9px 8px;
+  border: 1px solid rgba(255, 180, 110, 0.12);
+  border-radius: 6px;
+  background: rgba(5, 10, 13, 0.36);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  color: rgba(255, 229, 195, 0.56);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  letter-spacing: 0;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.48;
+  transition: opacity 160ms ease, background 160ms ease;
+}
+.iso-build-console.active {
+  opacity: 0.72;
+  background: rgba(5, 10, 13, 0.46);
+}
+.iso-build-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+.iso-build-spin {
+  display: inline-block;
+  color: rgba(255, 138, 58, 0.82);
+  text-align: center;
+}
+.iso-build-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+.iso-build-time { color: rgba(255, 255, 255, 0.42); }
+.iso-build-track {
+  height: 2px;
+  margin: 5px 0 4px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.055);
+}
+.iso-build-track i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgba(255, 138, 58, 0.74), rgba(47, 217, 200, 0.62));
+}
+.iso-build-lines {
+  min-height: 42px;
+  white-space: pre;
+  overflow: hidden;
+  color: rgba(218, 236, 226, 0.46);
+}
+
 ::selection { background: rgba(255, 138, 58, 0.35); color: white; }
 
 button {

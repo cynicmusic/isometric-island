@@ -6,6 +6,7 @@ import { schema, sectionOrder } from './config/paramSchema.js';
 import { defaultParams } from './config/defaults.js';
 import { ControlPanel } from './ui/ControlPanel.js';
 import { PerfOverlay } from './ui/PerfOverlay.js';
+import { BuildConsole } from './ui/BuildConsole.js';
 import { loadSticky, setSticky, clearSticky } from './config/sticky.js';
 import { loadPresets, savePresetToDisk } from './config/presets.js';
 
@@ -58,7 +59,8 @@ if (bootPreset && bootPreset.params) {
 }
 
 const store = new ParamStore(boot);
-const scene = new Scene(canvasContainer, store);
+const buildConsole = new BuildConsole({ parent: uiRoot, label: 'sim build' });
+const scene = new Scene(canvasContainer, store, { loader: buildConsole });
 
 // Reload also restores preset 1's camera pose — set after Scene built its
 // default camera, before the render loop starts.

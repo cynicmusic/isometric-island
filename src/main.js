@@ -183,7 +183,6 @@ godrayWorkshop = new GodRayWorkshopPanel({
   recipes: GODRAY_RECIPES,
   applyRecipe: applyGodrayRecipe,
 });
-uiRoot.appendChild(godrayWorkshop.root);
 captureSceneGodrayBase();
 godrayWorkshop.setCollapsed(true);
 
@@ -293,7 +292,7 @@ window.addEventListener('keydown', (event) => {
     if (!panel.collapsed) panel.toggle();
   }
   else if (k === 'f') { event.preventDefault(); blur(); perf.toggle(); }
-  else if (k === 't') { event.preventDefault(); blur(); godrayWorkshop.toggle(); }
+  else if (k === 't') { event.preventDefault(); blur(); }
   else if (k === 'r') { event.preventDefault(); blur(); randomize(); panel.flashStatus('rolled', 'ok'); }
 });
 

@@ -265,6 +265,16 @@
   outline: none;
   transition: filter 120ms;
 }
+.ff-slider input[type="range"]:focus,
+.ff-slider input[type="range"]:focus-visible,
+.ff-range input[type="range"]:focus,
+.ff-range input[type="range"]:focus-visible {
+  outline: none;
+}
+.ff-slider input[type="range"]::-moz-focus-outer,
+.ff-range input[type="range"]::-moz-focus-outer {
+  border: 0;
+}
 .ff-slider input[type="range"]:hover { filter: brightness(1.18); }
 .ff-slider input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -605,6 +615,7 @@
   transition: opacity 200ms;
   pointer-events: none;
 }
+.ff-perf * { pointer-events: none; }
 .ff-perf.hidden { opacity: 0; }
 .ff-perf-key { color: var(--text-dim); }
 .ff-perf-val { color: var(--text-mono); text-align: right; }

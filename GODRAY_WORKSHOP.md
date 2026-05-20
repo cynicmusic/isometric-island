@@ -2,6 +2,17 @@
 
 Status: research + lab direction, not a final-look pass.
 
+UI entry points:
+
+- Main sim: `/`
+- Sim-copy lab: `/lab/`
+- God-ray workshop: `/workshop/godrays/`
+
+The workshop and lab reuse the sim render path but disable preset saving back to
+`presets.json`. Their eight god-ray recipe buttons are deltas applied over the
+currently loaded scene preset; A-H / 1-8 still load the normal scene/camera
+presets read-only in lab/workshop.
+
 ## What the current shader is doing
 
 The current god-ray pass is a low-resolution screen-space integral. For every
@@ -187,3 +198,19 @@ Current guard:
 This makes `Edge source = 1` quieter, but it removes the poisonous horizon slab.
 The next tuning pass should recover strength from real silhouettes rather than
 letting the sea horizon emit.
+
+## Lab-only recipe row
+
+These are click-to-load god-ray stacks in the workshop HUD. They do not change
+camera pose and do not save anything to disk.
+
+| Slot | Name | Purpose |
+| --- | --- | --- |
+| 1 | prod base | current sim defaults; off/on baseline |
+| 2 | more emit | lower threshold to test sparse source masks |
+| 3 | short clean | short reach with denser taps to reduce blocks |
+| 4 | raw echo | old source for mountain/pixel smear diagnosis |
+| 5 | ridge edge | occluder-boundary source, horizon slab guarded |
+| 6 | edge inspect | direct edge-source debug view |
+| 7 | rays only | accumulated `godRT` debug view |
+| 8 | block read | intentionally coarse march blocks/perf limits |

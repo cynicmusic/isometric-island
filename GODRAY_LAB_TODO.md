@@ -30,6 +30,13 @@ Discipline:
 - [x] Record the exact params/camera for each PNG.
 - [x] Build and publish final state.
 
+## Pass 4 — God-Ray Workshop Orientation
+
+- [x] Add `/workshop/godrays/` as an explicit god-ray workshop route.
+- [x] Mark lab/workshop UI as sim-copy and preset-save-disabled.
+- [x] Add eight lab-only god-ray recipe deltas on top of loaded scene presets.
+- [ ] Use the recipe row to decide whether edge-source tuning or ray-coordinate/epipolar work is the next real algorithm step.
+
 ## Notes To Discuss
 
 - Bounce tint currently darkens/tints island fill but is not a true sky-horizon/sun-derived purple tint.

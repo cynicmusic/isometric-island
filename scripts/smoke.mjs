@@ -116,20 +116,21 @@ await page.waitForTimeout(550);
 await pose(700, 430, 700, 0, 50, 0);   await shot('smoke-reseed.png');
 
 // Post-FX active path: bloom + aerial haze (lighting) + god rays + Planet-R
-// (experimental). Exercises the offscreen pass/shader compile, screenshots,
-// then RESETS so the later reload→A1 guard still sees the golden bypass.
+// debug hook. Exercises the offscreen pass/shader compile, screenshots, then
+// RESETS so the later reload→A1 guard still sees the golden bypass.
 await page.evaluate(() => {
   window.isometric.store.set('lighting.bloom', 0.7);
   window.isometric.store.set('lighting.aerialHaze', 0.45);
   window.isometric.store.set('sun.elevationDeg', 7);          // low sun → god rays
-  window.isometric.experimental.set('godrays', true);
-  window.isometric.experimental.set('planetR', true);
+  window.isometric.store.set('godrays.enable', true);
+  window.isometric.scene.setExperimental?.({ planetR: true, planetRadiusKm: 1200 });
 });
 await pose(700, 150, 720, 0, 40, 0);   await shot('smoke-postfx.png');
 await page.evaluate(() => {
-  window.isometric.experimental.allOff();
+  window.isometric.scene.setExperimental?.({ planetR: false });
   window.isometric.store.set('lighting.bloom', 0);
   window.isometric.store.set('lighting.aerialHaze', 0);
+  window.isometric.store.set('godrays.enable', false);
   window.isometric.store.set('sun.elevationDeg', 26);
 });
 

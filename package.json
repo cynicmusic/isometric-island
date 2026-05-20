@@ -12,6 +12,7 @@
     "pop": "node scripts/pop.mjs",
     "smoke": "node scripts/smoke.mjs",
     "labtest": "node scripts/lab.mjs",
+    "godrecipes": "node scripts/godray-recipes.mjs",
     "diag": "node scripts/diag.mjs"
   },
   "dependencies": {

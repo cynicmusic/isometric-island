@@ -6,11 +6,12 @@
 import { presetGradient } from '../config/presets.js';
 
 export class ControlPanel {
-  constructor({ store, schema, sectionOrder, onAction, sticky, presets }) {
+  constructor({ store, schema, sectionOrder, onAction, onToggle, sticky, presets }) {
     this.store = store;
     this.schema = schema;
     this.sectionOrder = sectionOrder;
     this.onAction = onAction;
+    this.onToggle = onToggle;
     this.sticky = sticky || { has: () => false, toggle: () => false };
     this.presets = presets || { slots: {}, save: () => {}, load: () => {} };
     this.fieldUpdaters = new Map();
@@ -39,6 +40,7 @@ export class ControlPanel {
       <kbd>drag</kbd> look
       <kbd>H</kbd> panel
       <kbd>G</kbd> god rays
+      <kbd>T</kbd> workshop
       <kbd>F</kbd> fps
     `;
     document.body.appendChild(this.hints);
@@ -52,6 +54,7 @@ export class ControlPanel {
     this.handle.classList.toggle('visible', this.collapsed);
     // Control hints ride with the panel — clean view by default.
     this.hints.classList.toggle('show', !this.collapsed);
+    this.onToggle?.(this.collapsed);
   }
 
   flashStatus(text, kind = 'ok') {
@@ -172,6 +175,7 @@ export class ControlPanel {
       this.store.set(path, v);
       apply(v);
     });
+    this._releaseRangeFocus(input);
 
     this._attachSticky(row, path);
     this.fieldUpdaters.set(path, apply);
@@ -232,10 +236,21 @@ export class ControlPanel {
     apply(this.store.get(path));
     inMin.addEventListener('input', onChange);
     inMax.addEventListener('input', onChange);
+    this._releaseRangeFocus(inMin);
+    this._releaseRangeFocus(inMax);
 
     this._attachSticky(row, path);
     this.fieldUpdaters.set(path, apply);
     return row;
+  }
+
+  _releaseRangeFocus(input) {
+    const blur = () => input.blur();
+    input.addEventListener('pointerup', blur);
+    input.addEventListener('change', blur);
+    input.addEventListener('keydown', (event) => {
+      if (!event.key.startsWith('Arrow') && event.key !== 'Tab') blur();
+    });
   }
 
   _buildToggleField(path, field) {

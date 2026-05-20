@@ -10,6 +10,8 @@ import { TreeCensus } from './ui/TreeCensus.js';
 import { BuildConsole } from './ui/BuildConsole.js';
 import { loadSticky, setSticky, clearSticky } from './config/sticky.js';
 import { loadPresets, savePresetToDisk } from './config/presets.js';
+import { GODRAY_RECIPES } from './config/godrayRecipes.js';
+import { GodRayWorkshopPanel, cloneValue } from './ui/GodRayWorkshopPanel.js';
 
 const canvasContainer = document.getElementById('canvas-container');
 const uiRoot = document.getElementById('ui-root');
@@ -31,6 +33,13 @@ function setAt(obj, path, value) {
 const presets = await loadPresets();
 let activeBank = 'A';
 const bootPreset = presets['A1'];           // bank A slot 1 = the boot state
+let sceneGodrayBase = null;
+const GODRAY_BLUR_DEFAULTS = {
+  blurEnable: defaultParams.godrays.blurEnable,
+  blurAmount: defaultParams.godrays.blurAmount,
+  blurRadius: defaultParams.godrays.blurRadius,
+  blurPasses: defaultParams.godrays.blurPasses,
+};
 
 function deepMerge(target, source) {
   for (const k in source) {
@@ -114,6 +123,8 @@ function capturePreset() {
 function applyPreset(p) {
   if (!p || !p.params) return false;
   store.fromJSON(p.params);                       // notifies '*'
+  ensureGodrayBlurParams(p.params);
+  captureSceneGodrayBase();
   scene.regenerate();                             // immediate, supersedes debounce
   if (p.cam) {
     scene.camera.position.fromArray(p.cam.p);
@@ -155,13 +166,31 @@ const presetApi = {
   setBank, getBank: () => activeBank,
 };
 
-const panel = new ControlPanel({ store, schema, sectionOrder, sticky, presets: presetApi, onAction: handleAction });
+let godrayWorkshop = null;
+const panel = new ControlPanel({
+  store,
+  schema,
+  sectionOrder,
+  sticky,
+  presets: presetApi,
+  onAction: handleAction,
+  onToggle: (collapsed) => { if (collapsed) godrayWorkshop?.setCollapsed(true); },
+});
 uiRoot.appendChild(panel.root);
+
+godrayWorkshop = new GodRayWorkshopPanel({
+  store,
+  recipes: GODRAY_RECIPES,
+  applyRecipe: applyGodrayRecipe,
+});
+uiRoot.appendChild(godrayWorkshop.root);
+captureSceneGodrayBase();
+godrayWorkshop.setCollapsed(true);
 
 const perf = new PerfOverlay({ scene });
 uiRoot.appendChild(perf.root);
 
-const census = new TreeCensus({ scene });   // per-species planted counts (T)
+const census = new TreeCensus({ scene });   // per-species planted counts (debug overlay)
 uiRoot.appendChild(census.root);
 
 scene.start();
@@ -174,6 +203,7 @@ function handleAction(action) {
       for (const k of Object.keys(stickyMap)) delete stickyMap[k];
       store.reset();
       scene.regenerate();                         // immediate — no delayed fade pop
+      captureSceneGodrayBase();
       panel.refreshSticky();
       panel.flashStatus('default · sticky cleared', 'ok');
       break;
@@ -189,11 +219,14 @@ function handleAction(action) {
       store.set('lighting.bloom', 0);
       store.set('lighting.aerialHaze', 0);
       store.set('godrays.enable', false);
+      store.set('godrays.blurEnable', false);
+      captureSceneGodrayBase();
       panel.refreshPresets();
       panel.flashStatus('baseline · FX off', 'ok');
       break;
     case 'random':
       randomize();
+      captureSceneGodrayBase();
       panel.flashStatus('rolled', 'ok');
       break;
     default:
@@ -217,7 +250,14 @@ function randomize() {
   scene.regenerate();                             // immediate, single rebuild
 }
 
-// H/B panel · G god rays · F fps · R randomize · Esc closes panel (NOT D — D is WASD).
+function ensureGodrayBlurParams(snapshot = {}) {
+  const godrays = snapshot.godrays || {};
+  for (const [key, value] of Object.entries(GODRAY_BLUR_DEFAULTS)) {
+    if (godrays[key] === undefined) store.set(`godrays.${key}`, value);
+  }
+}
+
+// H/B panel · G god rays · T god-ray workshop · F fps · R randomize · Esc closes panel (NOT D — D is WASD).
 // A focused range slider must NOT eat these — only ignore real text entry.
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;                       // ignore OS key-repeat (was double-randomizing)
@@ -228,6 +268,7 @@ window.addEventListener('keydown', (event) => {
   if (isTextEntry) return;
   const k = event.key.toLowerCase();
   const blur = () => { if (t && t.tagName === 'INPUT' && t.blur) t.blur(); };
+  if (t && t.tagName === 'INPUT' && t.type === 'range' && /^[wasdqe]$/.test(k)) blur();
   // Presets: digit 1-8 loads, Shift+digit saves. Use event.code (layout-
   // independent) so Shift+1 isn't read as "!". Shift is allowed through the
   // modifier guard above (only meta/ctrl/alt bail).
@@ -241,8 +282,10 @@ window.addEventListener('keydown', (event) => {
   if (k === 'h' || k === 'b') { event.preventDefault(); blur(); panel.toggle(); }
   else if (k === 'g') {
     event.preventDefault(); blur();
+    const controlsOpen = !panel.collapsed;
     const next = !store.get('godrays.enable');
     store.set('godrays.enable', next);
+    if (controlsOpen) godrayWorkshop.setCollapsed(!next);
     panel.flashStatus(next ? 'god rays on' : 'god rays off', 'ok');
   }
   else if (k === 'escape') {
@@ -250,8 +293,28 @@ window.addEventListener('keydown', (event) => {
     if (!panel.collapsed) panel.toggle();
   }
   else if (k === 'f') { event.preventDefault(); blur(); perf.toggle(); }
-  else if (k === 't') { event.preventDefault(); blur(); census.toggle(); }
+  else if (k === 't') { event.preventDefault(); blur(); godrayWorkshop.toggle(); }
   else if (k === 'r') { event.preventDefault(); blur(); randomize(); panel.flashStatus('rolled', 'ok'); }
 });
 
-window.isometric = { scene, store, panel, perf, census, sticky, presets: presetApi };
+function captureSceneGodrayBase() {
+  sceneGodrayBase = {
+    ...cloneValue(defaultParams.godrays),
+    ...cloneValue(store.get('godrays') || {}),
+  };
+  godrayWorkshop?.setActive(1);
+}
+
+function applyGodrayRecipe(recipe) {
+  if (!recipe) return false;
+  const godrays = recipe.restoreSceneGodrays ? sceneGodrayBase : recipe.godrays;
+  for (const [key, value] of Object.entries(godrays || {})) {
+    store.set(`godrays.${key}`, value);
+  }
+  godrayWorkshop.setActive(recipe.id);
+  panel.flashStatus(`god recipe ${recipe.id} · ${recipe.label}`, 'ok');
+  return true;
+}
+
+window.isometric = { scene, store, panel, perf, census, sticky, presets: presetApi, godrayWorkshop, godrayRecipes: GODRAY_RECIPES, applyGodrayRecipe };
+window.godrayWorkshop = window.isometric;

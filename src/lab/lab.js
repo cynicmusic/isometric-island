@@ -12,9 +12,13 @@ import { ControlPanel } from '../ui/ControlPanel.js';
 import { PerfOverlay } from '../ui/PerfOverlay.js';
 import { BuildConsole } from '../ui/BuildConsole.js';
 import { loadPresets } from '../config/presets.js';
+import { GODRAY_RECIPES } from '../config/godrayRecipes.js';
+import { GodRayWorkshopPanel, cloneValue } from '../ui/GodRayWorkshopPanel.js';
 
 const canvasContainer = document.getElementById('canvas-container');
 const uiRoot = document.getElementById('ui-root');
+const isGodrayWorkshop = location.pathname.includes('/workshop/godrays');
+const modeLabel = isGodrayWorkshop ? 'god ray workshop' : 'lab sim copy';
 
 // Lab-only god-ray workshop controls. The shader accepts these with neutral
 // defaults, but the public sim panel stays clean until an experiment earns it.
@@ -33,6 +37,12 @@ const labGodrayDefaults = {
   edgeGain: 1,
   debugView: 0,
   debugGain: 1,
+};
+const godrayBlurDefaults = {
+  blurEnable: defaultParams.godrays.blurEnable,
+  blurAmount: defaultParams.godrays.blurAmount,
+  blurRadius: defaultParams.godrays.blurRadius,
+  blurPasses: defaultParams.godrays.blurPasses,
 };
 
 // ---- lab-local sticky params ----------------------------------------------
@@ -54,9 +64,26 @@ function ensureLabGodrayParams(force = false) {
   }
 }
 
+function ensureGodrayBlurParams(snapshot = {}) {
+  const godrays = snapshot.godrays || {};
+  for (const [key, value] of Object.entries(godrayBlurDefaults)) {
+    if (godrays[key] === undefined) store.set(`godrays.${key}`, value);
+  }
+}
+
+function captureSceneGodrayBase() {
+  sceneGodrayBase = {
+    ...cloneValue(defaultParams.godrays),
+    ...cloneValue(store.get('godrays') || {}),
+    ...labGodrayDefaults,
+  };
+  workshopHud?.setActive(1);
+}
+
 const presets = await loadPresets();
 let activeBank = 'A';
 const bootPreset = presets['A1'];
+let sceneGodrayBase = null;
 
 function deepMerge(target, source) {
   for (const k in source) {
@@ -82,7 +109,7 @@ if (bootPreset && bootPreset.params) {
 }
 
 const store = new ParamStore(boot);
-const buildConsole = new BuildConsole({ parent: uiRoot, label: 'lab sim build' });
+const buildConsole = new BuildConsole({ parent: uiRoot, label: `${modeLabel} build` });
 const scene = new Scene(canvasContainer, store, { loader: buildConsole });
 
 if (bootPreset && bootPreset.cam) {
@@ -108,7 +135,9 @@ const sticky = {
 function applyPreset(p) {
   if (!p || !p.params) return false;
   store.fromJSON(p.params);
+  ensureGodrayBlurParams(p.params);
   ensureLabGodrayParams(false);
+  captureSceneGodrayBase();
   scene.regenerate();
   if (p.cam) {
     scene.camera.position.fromArray(p.cam.p);
@@ -145,9 +174,27 @@ const presetApi = {
   setBank, getBank: () => activeBank,
 };
 
-const panel = new ControlPanel({ store, schema, sectionOrder, sticky, presets: presetApi, onAction: handleAction });
+let workshopHud = null;
+const panel = new ControlPanel({
+  store,
+  schema,
+  sectionOrder,
+  sticky,
+  presets: presetApi,
+  onAction: handleAction,
+  onToggle: (collapsed) => { if (collapsed) workshopHud?.setCollapsed(true); },
+});
 uiRoot.appendChild(panel.root);
-panel.flashStatus('lab sim copy · preset save disabled', 'ok');
+panel.flashStatus(`${modeLabel} · preset save disabled`, 'ok');
+
+workshopHud = new GodRayWorkshopPanel({
+  store,
+  recipes: GODRAY_RECIPES,
+  applyRecipe: applyGodrayRecipe,
+});
+uiRoot.appendChild(workshopHud.root);
+captureSceneGodrayBase();
+workshopHud.setCollapsed(!store.get('godrays.enable'));
 
 const perf = new PerfOverlay({ scene });
 uiRoot.appendChild(perf.root);
@@ -161,6 +208,7 @@ function handleAction(action) {
       for (const k of Object.keys(stickyMap)) delete stickyMap[k];
       store.reset();
       ensureLabGodrayParams(true);
+      captureSceneGodrayBase();
       scene.regenerate();
       panel.refreshSticky();
       panel.flashStatus('lab default · disk untouched', 'ok');
@@ -175,11 +223,14 @@ function handleAction(action) {
       store.set('lighting.bloom', 0);
       store.set('lighting.aerialHaze', 0);
       store.set('godrays.enable', false);
+      store.set('godrays.blurEnable', false);
+      captureSceneGodrayBase();
       panel.refreshPresets();
       panel.flashStatus('baseline · FX off', 'ok');
       break;
     case 'random':
       randomize();
+      captureSceneGodrayBase();
       panel.flashStatus('rolled', 'ok');
       break;
     default:
@@ -211,6 +262,7 @@ window.addEventListener('keydown', (event) => {
   if (isTextEntry) return;
   const k = event.key.toLowerCase();
   const blur = () => { if (t && t.tagName === 'INPUT' && t.blur) t.blur(); };
+  if (t && t.tagName === 'INPUT' && t.type === 'range' && /^[wasdqe]$/.test(k)) blur();
   const slotMatch = /^(?:Digit|Numpad)([1-8])$/.exec(event.code);
   if (slotMatch) {
     event.preventDefault(); blur();
@@ -221,8 +273,10 @@ window.addEventListener('keydown', (event) => {
   if (k === 'h' || k === 'b') { event.preventDefault(); blur(); panel.toggle(); }
   else if (k === 'g') {
     event.preventDefault(); blur();
+    const controlsOpen = !panel.collapsed;
     const next = !store.get('godrays.enable');
     store.set('godrays.enable', next);
+    if (controlsOpen) workshopHud.setCollapsed(!next);
     panel.flashStatus(next ? 'god rays on' : 'god rays off', 'ok');
   }
   else if (k === 'escape') {
@@ -230,8 +284,25 @@ window.addEventListener('keydown', (event) => {
     if (!panel.collapsed) panel.toggle();
   }
   else if (k === 'f') { event.preventDefault(); blur(); perf.toggle(); }
+  else if (k === 't') { event.preventDefault(); blur(); workshopHud.toggle(); }
   else if (k === 'r') { event.preventDefault(); blur(); randomize(); panel.flashStatus('rolled', 'ok'); }
 });
 
-window.lab = { scene, store, panel, perf, sticky, presets: presetApi };
+function setPath(path, value) {
+  store.set(path, value);
+}
+
+function applyGodrayRecipe(recipe) {
+  if (!recipe) return false;
+  const godrays = recipe.restoreSceneGodrays ? sceneGodrayBase : recipe.godrays;
+  for (const [key, value] of Object.entries(godrays || {})) {
+    setPath(`godrays.${key}`, value);
+  }
+  workshopHud.setActive(recipe.id);
+  panel.flashStatus(`god recipe ${recipe.id} · ${recipe.label}`, 'ok');
+  return true;
+}
+
+window.lab = { scene, store, panel, perf, sticky, presets: presetApi, godrayWorkshop: workshopHud, godrayRecipes: GODRAY_RECIPES, applyGodrayRecipe };
+window.godrayWorkshop = window.lab;
 window.isometric = window.lab;

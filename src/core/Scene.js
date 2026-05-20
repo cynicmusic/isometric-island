@@ -369,7 +369,9 @@ export class Scene {
   }
 
   // Per-frame post-FX inputs. bloom/haze/godrays are live store params.
-  // sunUV/visible drive godrays + haze bias.
+  // sunUV stays useful even off-screen: the god-ray workshop wants the pass
+  // alive through full 360 camera rotation, with the source clamped at the
+  // screen edge rather than hard-bypassed.
   _fxParams() {
     const s = this.store;
     const sd = this._sunDir();
@@ -377,22 +379,25 @@ export class Scene {
     // distance — but it must be projected from INSIDE the far plane. The old
     // code pushed it 100000 units out while camera.far is 32000, so project()
     // returned z>1 and the `wp.z<1` gate failed forever: god rays were
-    // bypassed unconditionally. Use an explicit forward-hemisphere test plus
-    // a safe in-frustum sample distance instead.
-    const fwd = (this._fxf ||= new THREE.Vector3());
-    this.camera.getWorldDirection(fwd);
-    const frontDot = fwd.dot(sd);
+    // bypassed unconditionally. Keep the point at a safe distance; when it is
+    // off-screen or behind the camera, the god pass clamps the ray origin to
+    // the nearest screen edge instead of disabling itself.
     const wp = (this._fxv ||= new THREE.Vector3());
     wp.copy(this.camera.position).addScaledVector(sd, 2000).project(this.camera);
-    const sunUV = { x: wp.x * 0.5 + 0.5, y: wp.y * 0.5 + 0.5 };
-    const offscreen = Math.max(0, -sunUV.x, sunUV.x - 1, -sunUV.y, sunUV.y - 1);
-    // God-ray presets can have a dramatic red sky with the actual sun just
-    // off the shoulder/off-frame. Keep the march alive there; only fade out
-    // when the sun is truly behind the camera or far outside the screen.
-    const frontFade = THREE.MathUtils.smoothstep(frontDot, -0.55, -0.05);
-    const edgeFade = 1 - THREE.MathUtils.smoothstep(offscreen, 1.75, 3.75);
+    let sunUV = { x: wp.x * 0.5 + 0.5, y: wp.y * 0.5 + 0.5 };
+    if (!Number.isFinite(sunUV.x) || !Number.isFinite(sunUV.y)) {
+      const right = (this._fxRight ||= new THREE.Vector3()).setFromMatrixColumn(this.camera.matrixWorld, 0);
+      const up = (this._fxUp ||= new THREE.Vector3()).setFromMatrixColumn(this.camera.matrixWorld, 1);
+      const sx = sd.dot(right);
+      const sy = sd.dot(up);
+      const edge = 2 / Math.max(0.001, Math.abs(sx), Math.abs(sy));
+      sunUV = { x: 0.5 + sx * edge, y: 0.5 + sy * edge };
+    }
+    // Camera visibility is deliberately NOT a gate. Only fade when the light
+    // direction is effectively below the horizon, where the scene itself has
+    // no useful bright source to scatter.
     const heightFade = THREE.MathUtils.smoothstep(sd.y, -0.02, 0.04);
-    const sunFade = frontFade * edgeFade * heightFade;
+    const sunFade = heightFade;
     const sunVisible = sunFade > 0.001;
     const gr = s.get('godrays') || {};
     const god = gr.enable ? {
@@ -406,6 +411,10 @@ export class Scene {
       edgeSource: gr.edgeSource ?? 0,
       edgeWidth: gr.edgeWidth ?? 1.2,
       edgeGain: gr.edgeGain ?? 1,
+      blurEnable: !!gr.blurEnable,
+      blurAmount: gr.blurAmount ?? 0.18,
+      blurRadius: gr.blurRadius ?? 1.5,
+      blurPasses: gr.blurPasses ?? 1,
       debugView: gr.debugView ?? 0,
       debugGain: gr.debugGain ?? 1,
     } : { intensity: 0 };

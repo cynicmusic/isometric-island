@@ -170,6 +170,10 @@ export class PostFX {
         magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter,
       });
     this.godRT.texture.colorSpace = THREE.LinearSRGBColorSpace;
+    this.godBlurA = this.godRT.clone();
+    this.godBlurB = this.godRT.clone();
+    this.godBlurA.texture.colorSpace = THREE.LinearSRGBColorSpace;
+    this.godBlurB.texture.colorSpace = THREE.LinearSRGBColorSpace;
 
     this.brightMat = new THREE.ShaderMaterial({
       uniforms: { tScene: { value: null }, uTexel: { value: new THREE.Vector2() }, uThresh: { value: 0.72 } },
@@ -205,25 +209,56 @@ export class PostFX {
       depthTest: false, depthWrite: false,
     });
 
+    this.godBlurMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tGod: { value: null },
+        uGodTexel: { value: new THREE.Vector2(1 / 256, 1 / 144) },
+        uDirection: { value: new THREE.Vector2(1, 0) },
+        uRadius: { value: 1 },
+      },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }',
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform sampler2D tGod;
+        uniform vec2 uGodTexel, uDirection;
+        uniform float uRadius;
+        void main(){
+          vec2 o = uDirection * uGodTexel * max(0.0, uRadius);
+          vec3 c = texture2D(tGod, vUv).rgb * 0.34;
+          c += texture2D(tGod, vUv + o).rgb * 0.23;
+          c += texture2D(tGod, vUv - o).rgb * 0.23;
+          c += texture2D(tGod, vUv + o * 2.0).rgb * 0.10;
+          c += texture2D(tGod, vUv - o * 2.0).rgb * 0.10;
+          gl_FragColor = vec4(c, 1.0);
+        }`,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    });
+
     // Additive ray-only overlay. This is the lab/debug path for god rays when
     // no other post effect is active: render the real scene directly, then
     // add only the ray buffer. No base-color pass-through, no hidden retone.
     this.overlayMat = new THREE.ShaderMaterial({
       uniforms: {
         tGod: { value: null },
+        tGodBlur: { value: null },
+        uGodBlur: { value: 0 },
         uGodSharp: { value: 0 },
         uGodTexel: { value: new THREE.Vector2() },
       },
       vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }',
       fragmentShader: `
         varying vec2 vUv;
-        uniform sampler2D tGod;
-        uniform float uGodSharp;
+        uniform sampler2D tGod, tGodBlur;
+        uniform float uGodSharp, uGodBlur;
         uniform vec2 uGodTexel;
         void main(){
           vec2 g = (floor(vUv / uGodTexel) + 0.5) * uGodTexel;
           vec2 guv = mix(vUv, g, uGodSharp);
-          gl_FragColor = vec4(texture2D(tGod, guv).rgb, 1.0);
+          vec3 raw = texture2D(tGod, guv).rgb;
+          vec3 soft = texture2D(tGodBlur, guv).rgb;
+          gl_FragColor = vec4(mix(raw, soft, uGodBlur), 1.0);
         }`,
       blending: THREE.AdditiveBlending,
       transparent: true,
@@ -238,19 +273,23 @@ export class PostFX {
     this.debugMat = new THREE.ShaderMaterial({
       uniforms: {
         tGod: { value: null },
+        tGodBlur: { value: null },
+        uGodBlur: { value: 0 },
         uGodSharp: { value: 0 },
         uGodTexel: { value: new THREE.Vector2() },
       },
       vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }',
       fragmentShader: `
         varying vec2 vUv;
-        uniform sampler2D tGod;
-        uniform float uGodSharp;
+        uniform sampler2D tGod, tGodBlur;
+        uniform float uGodSharp, uGodBlur;
         uniform vec2 uGodTexel;
         void main(){
           vec2 g = (floor(vUv / uGodTexel) + 0.5) * uGodTexel;
           vec2 guv = mix(vUv, g, uGodSharp);
-          gl_FragColor = vec4(texture2D(tGod, guv).rgb, 1.0);
+          vec3 raw = texture2D(tGod, guv).rgb;
+          vec3 soft = texture2D(tGodBlur, guv).rgb;
+          gl_FragColor = vec4(mix(raw, soft, uGodBlur), 1.0);
         }`,
       depthTest: false,
       depthWrite: false,
@@ -260,21 +299,22 @@ export class PostFX {
     // ---- composite — scene + upsampled god rays + haze + bloom ----------
     this.compMat = new THREE.ShaderMaterial({
       uniforms: {
-        tScene: { value: null }, tBloom: { value: null }, tGod: { value: null },
+        tScene: { value: null }, tBloom: { value: null }, tGod: { value: null }, tGodBlur: { value: null },
         uBloom: { value: 0 }, uHaze: { value: 0 },
         uHazeColor: { value: new THREE.Color('#bcd4d6') },
         uSunCol: { value: new THREE.Color('#ffd9a0') },
         uSunUV: { value: new THREE.Vector2(0.5, 0.7) }, uSunVis: { value: 0 },
         uGod: { value: 0 },
         uGodCompare: { value: 0 },
+        uGodBlur: { value: 0 },
         uGodSharp: { value: 0 },        // 0 = bilinear upsample · 1 = raw blocks
         uGodTexel: { value: new THREE.Vector2() },
       },
       vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }',
       fragmentShader: `
         varying vec2 vUv;
-        uniform sampler2D tScene, tBloom, tGod;
-        uniform float uBloom, uHaze, uSunVis, uGod, uGodCompare, uGodSharp;
+        uniform sampler2D tScene, tBloom, tGod, tGodBlur;
+        uniform float uBloom, uHaze, uSunVis, uGod, uGodCompare, uGodBlur, uGodSharp;
         uniform vec3 uHazeColor, uSunCol; uniform vec2 uSunUV, uGodTexel;
         void main(){
           vec3 col = texture2D(tScene, vUv).rgb;
@@ -285,7 +325,9 @@ export class PostFX {
           if (uGod > 0.001 && uSunVis > 0.001 && (uGodCompare < 0.5 || vUv.x >= 0.5)) {
             vec2 g = (floor(vUv / uGodTexel) + 0.5) * uGodTexel;
             vec2 guv = mix(vUv, g, uGodSharp);
-            col += texture2D(tGod, guv).rgb;
+            vec3 raw = texture2D(tGod, guv).rgb;
+            vec3 soft = texture2D(tGodBlur, guv).rgb;
+            col += mix(raw, soft, uGodBlur);
           }
 
           // Aerial haze — sky-coloured veil, thicker toward the horizon and a
@@ -310,11 +352,13 @@ export class PostFX {
 
     this._brightQuad = new THREE.Mesh(QUAD, this.brightMat);
     this._godQuad = new THREE.Mesh(QUAD, this.godMat);
+    this._godBlurQuad = new THREE.Mesh(QUAD, this.godBlurMat);
     this._overlayQuad = new THREE.Mesh(QUAD, this.overlayMat);
     this._debugQuad = new THREE.Mesh(QUAD, this.debugMat);
     this._compQuad = new THREE.Mesh(QUAD, this.compMat);
     this._brightScene = new THREE.Scene().add(this._brightQuad);
     this._godScene = new THREE.Scene().add(this._godQuad);
+    this._godBlurScene = new THREE.Scene().add(this._godBlurQuad);
     this._overlayScene = new THREE.Scene().add(this._overlayQuad);
     this._debugScene = new THREE.Scene().add(this._debugQuad);
     this._compScene = new THREE.Scene().add(this._compQuad);
@@ -333,13 +377,16 @@ export class PostFX {
     const gw = Math.max(1, (w * this._godScale) | 0);
     const gh = Math.max(1, (h * this._godScale) | 0);
     if (this.godRT.width !== gw || this.godRT.height !== gh) this.godRT.setSize(gw, gh);
+    if (this.godBlurA.width !== gw || this.godBlurA.height !== gh) this.godBlurA.setSize(gw, gh);
+    if (this.godBlurB.width !== gw || this.godBlurB.height !== gh) this.godBlurB.setSize(gw, gh);
     this.compMat.uniforms.uGodTexel.value.set(1 / gw, 1 / gh);
     this.godMat.uniforms.uGodTexel.value.set(1 / gw, 1 / gh);
+    this.godBlurMat.uniforms.uGodTexel.value.set(1 / gw, 1 / gh);
   }
 
   // p: { bloom, haze, hazeColor, sunCol, sunUV, sunVisible, god:{intensity,
   //      samples, density, decay, weight, exposure, threshold, horizon,
-  //      radius, tint, resScale, sharp, source, compare} }
+  //      radius, tint, resScale, sharp, source, compare, blurAmount} }
   render(scene, camera, p) {
     const bloom = p.bloom || 0, haze = p.haze || 0;
     const g = p.god || {};
@@ -403,10 +450,31 @@ export class PostFX {
       r.setRenderTarget(this.godRT);
       r.render(this._godScene, ORTHO);
     }
+    const blurAmount = gOn && g.blurEnable ? Math.max(0, Math.min(1, g.blurAmount ?? 0.18)) : 0;
+    let godBlurTexture = this.godRT.texture;
+    if (blurAmount > 0.001) {
+      const bu = this.godBlurMat.uniforms;
+      bu.uRadius.value = Math.max(0.05, Math.min(8, g.blurRadius ?? 1.5));
+      const passes = Math.max(1, Math.min(4, (g.blurPasses ?? 1) | 0));
+      for (let i = 0; i < passes; i++) {
+        bu.tGod.value = godBlurTexture;
+        bu.uDirection.value.set(1, 0);
+        r.setRenderTarget(this.godBlurA);
+        r.render(this._godBlurScene, ORTHO);
+
+        bu.tGod.value = this.godBlurA.texture;
+        bu.uDirection.value.set(0, 1);
+        r.setRenderTarget(this.godBlurB);
+        r.render(this._godBlurScene, ORTHO);
+        godBlurTexture = this.godBlurB.texture;
+      }
+    }
 
     if (gDebug > 0) {
       const d = this.debugMat.uniforms;
       d.tGod.value = this.godRT.texture;
+      d.tGodBlur.value = godBlurTexture;
+      d.uGodBlur.value = blurAmount;
       d.uGodSharp.value = Math.max(0, Math.min(1, g.sharp ?? 0));
       d.uGodTexel.value.copy(this.compMat.uniforms.uGodTexel.value);
       r.setRenderTarget(null);
@@ -423,6 +491,8 @@ export class PostFX {
 
       const o = this.overlayMat.uniforms;
       o.tGod.value = this.godRT.texture;
+      o.tGodBlur.value = godBlurTexture;
+      o.uGodBlur.value = blurAmount;
       o.uGodSharp.value = Math.max(0, Math.min(1, g.sharp ?? 0));
       o.uGodTexel.value.copy(this.compMat.uniforms.uGodTexel.value);
 
@@ -443,6 +513,7 @@ export class PostFX {
     c.tScene.value = this.sceneRT.texture;
     c.tBloom.value = this.bloomRT.texture;
     c.tGod.value = this.godRT.texture;
+    c.tGodBlur.value = godBlurTexture;
     c.uBloom.value = bloom;
     c.uHaze.value = haze;
     if (p.hazeColor) c.uHazeColor.value.copy(p.hazeColor);
@@ -451,6 +522,7 @@ export class PostFX {
     c.uSunVis.value = sunFade;
     c.uGod.value = gOn ? 1 : 0;
     c.uGodCompare.value = g.compare ? 1 : 0;
+    c.uGodBlur.value = blurAmount;
     c.uGodSharp.value = Math.max(0, Math.min(1, g.sharp ?? 0));
 
     r.setRenderTarget(null);
@@ -459,6 +531,7 @@ export class PostFX {
 
   dispose() {
     this.sceneRT.dispose(); this.bloomRT.dispose(); this.godRT.dispose();
-    this.brightMat.dispose(); this.godMat.dispose(); this.overlayMat.dispose(); this.debugMat.dispose(); this.compMat.dispose();
+    this.godBlurA.dispose(); this.godBlurB.dispose();
+    this.brightMat.dispose(); this.godMat.dispose(); this.godBlurMat.dispose(); this.overlayMat.dispose(); this.debugMat.dispose(); this.compMat.dispose();
   }
 }

@@ -3,11 +3,10 @@
 //     animated Voronoi, ported verbatim (world-XZ projected, turquoise tint).
 //   · translucent surface plane extends past the island so the bounded edge
 //     dissolves into the atmosphere's horizon haze (PLAN.md §9).
-//   · shoreline glow = aquarium-sky pillar-glow math: 0xff8a36 PointLights,
-//     decay 2, gently pulsed.
+//   · shoreline glow = generated coastline sampler: cyan wash + white lip,
+//     drawn as additive waterline ribbons instead of an arbitrary light ring.
 
 import * as THREE from 'three';
-import { SHORE_GLOW } from '../gen/palette.js';
 
 const causticsVertex = /* glsl */`
 varying vec3 vWorldPos;
@@ -73,6 +72,115 @@ void main() {
   gl_FragColor = vec4(color, c * 0.22 * fade);
 }
 `;
+
+const shoreGlowVertex = /* glsl */`
+varying vec2 vUv;
+varying vec3 vWorldPos;
+void main() {
+  vUv = uv;
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorldPos = wp.xyz;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}
+`;
+
+const shoreGlowFragment = /* glsl */`
+uniform float uTime;
+uniform float uAmount;
+uniform float uAlpha;
+uniform float uFalloff;
+uniform vec3 uColor;
+varying vec2 vUv;
+varying vec3 vWorldPos;
+
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 345.45));
+  p += dot(p, p + 34.345);
+  return fract(p.x * p.y);
+}
+
+void main() {
+  float across = 1.0 - smoothstep(0.76, 1.0, abs(vUv.x - 0.5) * 2.0);
+  float coast = smoothstep(0.02, 0.16, vUv.y) * (1.0 - smoothstep(0.88, 1.0, vUv.y));
+  float outward = exp(-vUv.y * uFalloff);
+  float n = hash21(floor(vWorldPos.xz * 0.08));
+  float pulse = 0.88 + 0.08 * sin(uTime * 0.9 + n * 6.2831)
+    + 0.04 * sin(uTime * 1.7 + vWorldPos.x * 0.013 + vWorldPos.z * 0.017);
+  float a = uAmount * uAlpha * across * coast * outward * pulse;
+  gl_FragColor = vec4(uColor, a);
+}
+`;
+
+function sampleCoastline(volume, seaLevel) {
+  if (!volume?.land || !volume?.material) return [];
+  const { res, cellSize, vstep } = volume;
+  const stride = Math.max(1, Math.floor(res / 384));
+  const out = [];
+  const maxSamples = 1800;
+  const dirs = [
+    [-1, 0], [1, 0], [0, -1], [0, 1],
+    [-1, -1], [1, -1], [-1, 1], [1, 1],
+  ];
+
+  for (let j = stride; j < res - stride; j += stride) {
+    for (let i = stride; i < res - stride; i += stride) {
+      const idx = volume.idx(i, j);
+      if (!volume.land[idx]) continue;
+      const y = volume.heightVox[idx] * vstep;
+      if (y < seaLevel - 0.5 || y > seaLevel + cellSize * 3.0) continue;
+
+      let nx = 0, nz = 0, waterN = 0;
+      for (const [di, dj] of dirs) {
+        const ni = i + di, nj = j + dj;
+        if (!volume.inBounds(ni, nj)) continue;
+        const nidx = volume.idx(ni, nj);
+        const ny = volume.heightVox[nidx] * vstep;
+        if (!volume.land[nidx] || ny <= seaLevel + 0.25) {
+          nx += di;
+          nz += dj;
+          waterN++;
+        }
+      }
+      if (!waterN) continue;
+      const len = Math.hypot(nx, nz) || 1;
+      const [x, z] = volume.cellToWorld(i, j);
+      out.push({ x, z, nx: nx / len, nz: nz / len });
+    }
+  }
+
+  if (out.length <= maxSamples) return out;
+  const keep = [];
+  const skip = out.length / maxSamples;
+  for (let k = 0; k < maxSamples; k++) keep.push(out[Math.floor(k * skip)]);
+  return keep;
+}
+
+function makeGlowGeometry(samples, { y, cellSize, widthMul, depthMul, insetMul }) {
+  const pos = [];
+  const uv = [];
+  const width = Math.max(cellSize * widthMul, 1);
+  const depth = Math.max(cellSize * depthMul, 1);
+  const inset = cellSize * insetMul;
+  for (const s of samples) {
+    const tx = -s.nz, tz = s.nx;
+    const ix = s.x - s.nx * inset;
+    const iz = s.z - s.nz * inset;
+    const ox = s.x + s.nx * depth;
+    const oz = s.z + s.nz * depth;
+    const hw = width * 0.5;
+    const a = [ix - tx * hw, y, iz - tz * hw];
+    const b = [ix + tx * hw, y, iz + tz * hw];
+    const c = [ox + tx * hw, y, oz + tz * hw];
+    const d = [ox - tx * hw, y, oz - tz * hw];
+    pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+    uv.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.computeBoundingSphere();
+  return geo;
+}
 
 export class Sea {
   constructor(params) {
@@ -176,26 +284,61 @@ export class Sea {
     this.caustic.renderOrder = 3;
     this.group.add(this.caustic);
 
-    // Shoreline glow ring (aquarium-sky pillar-glow math).
-    this.lights = [];
-    const ringR = params.radius * 0.96;
-    for (let k = 0; k < 18; k++) {
-      const a = (k / 18) * Math.PI * 2;
-      const light = new THREE.PointLight(SHORE_GLOW, 0, params.radius * 0.5, 2);
-      light.position.set(Math.cos(a) * ringR, params.seaLevel + 2.0, Math.sin(a) * ringR);
-      light.userData.phase = k * 1.731;
-      this.lights.push(light);
-      this.group.add(light);
-    }
+    this.shoreGlow = this._makeShoreGlow(params);
+    if (this.shoreGlow) this.group.add(this.shoreGlow);
 
     this.setLevel(params.seaLevel);
     this.setShoreGlow(params.shoreGlow);
   }
 
+  _makeShoreGlow(params) {
+    const samples = sampleCoastline(params.volume, params.seaLevel);
+    if (!samples.length) return null;
+
+    const group = new THREE.Group();
+    group.name = 'CoastlineGlow';
+    const base = {
+      vertexShader: shoreGlowVertex,
+      fragmentShader: shoreGlowFragment,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.DoubleSide,
+    };
+
+    const makeLayer = (name, color, alpha, falloff, dims, yOffset) => {
+      const mat = new THREE.ShaderMaterial({
+        ...base,
+        uniforms: {
+          uTime: { value: 0 },
+          uAmount: { value: 0 },
+          uAlpha: { value: alpha },
+          uFalloff: { value: falloff },
+          uColor: { value: new THREE.Color(color) },
+        },
+      });
+      const mesh = new THREE.Mesh(makeGlowGeometry(samples, {
+        y: params.seaLevel + yOffset,
+        cellSize: params.volume.cellSize,
+        ...dims,
+      }), mat);
+      mesh.name = name;
+      mesh.renderOrder = 5;
+      group.add(mesh);
+      return mat;
+    };
+
+    this._shoreGlowMats = [
+      makeLayer('CoastGlowCyan', '#21e6ff', 0.34, 2.2, { widthMul: 2.4, depthMul: 5.2, insetMul: 0.20 }, 0.08),
+      makeLayer('CoastGlowWhite', '#f4ffff', 0.22, 4.8, { widthMul: 1.25, depthMul: 1.9, insetMul: 0.05 }, 0.11),
+    ];
+    return group;
+  }
+
   setLevel(y) {
     this.surface.position.y = y;
     this.caustic.position.y = y - 0.5;
-    for (const l of this.lights) l.position.y = y + 2.0;
   }
   setCaustic(scale, intensity) {
     this.causticMat.uniforms.uCausticScale.value = scale;
@@ -203,6 +346,7 @@ export class Sea {
   }
   setShoreGlow(amount) {
     this._glowBase = THREE.MathUtils.clamp(amount, 0, 1.5);
+    for (const mat of this._shoreGlowMats || []) mat.uniforms.uAmount.value = this._glowBase;
   }
   // Drive the sea's outer-ring fade colour from the live sky horizon (same
   // value the fog samples from the LUT) so the ocean meshes into the actual
@@ -224,10 +368,6 @@ export class Sea {
   update(elapsed, camPos) {
     if (camPos && this._surfUniforms) this._surfUniforms.uCamPos.value.copy(camPos);
     this.causticMat.uniforms.uTime.value = elapsed;
-    for (const l of this.lights) {
-      const pulse = 0.86 + Math.sin(elapsed * 0.92 + l.userData.phase) * 0.10
-        + Math.sin(elapsed * 1.7 + l.userData.phase * 0.37) * 0.04;
-      l.intensity = Math.max(0, this._glowBase * 1.7 * pulse);
-    }
+    for (const mat of this._shoreGlowMats || []) mat.uniforms.uTime.value = elapsed;
   }
 }

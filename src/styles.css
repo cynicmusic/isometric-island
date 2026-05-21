@@ -61,7 +61,18 @@ html, body {
   user-select: none;
   opacity: 0;
   transform: translateY(6px);
-  transition: opacity 180ms ease, background 160ms ease, transform 180ms ease;
+  transition: opacity 500ms ease, background 180ms ease, transform 220ms ease;
+}
+.iso-build-console.boot {
+  width: min(520px, calc(100vw - 28px));
+  padding: 9px 11px 10px;
+  background: rgba(5, 10, 13, 0.58);
+  border-color: rgba(255, 180, 110, 0.18);
+}
+.iso-build-console.transition {
+  width: min(360px, calc(100vw - 28px));
+  padding: 5px 8px 6px;
+  background: rgba(5, 10, 13, 0.32);
 }
 .iso-build-console.visible {
   opacity: 0.48;
@@ -71,6 +82,10 @@ html, body {
   opacity: 0.72;
   background: rgba(5, 10, 13, 0.46);
 }
+.iso-build-console.boot.visible { opacity: 0.78; }
+.iso-build-console.boot.active { opacity: 0.9; background: rgba(5, 10, 13, 0.64); }
+.iso-build-console.transition .iso-build-lines { display: none; }
+.iso-build-console.transition .iso-build-track { margin-bottom: 0; }
 .iso-build-row {
   display: grid;
   grid-template-columns: 14px 1fr auto;

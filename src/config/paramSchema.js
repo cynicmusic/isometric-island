@@ -23,6 +23,7 @@ export const schema = {
       mieBeta: { type: 'float', label: 'Mie β', min: 0.0, max: 0.05, step: 0.0005, default: 0.021, hint: 'haze thickness' },
       mieG: { type: 'float', label: 'Mie g', min: 0.0, max: 0.95, step: 0.005, default: 0.758 },
       ozoneMul: { type: 'float', label: 'Ozone ×', min: 0.0, max: 3.0, step: 0.01, default: 1.0 },
+      planetRadiusKm: { type: 'float', label: 'Planet R', min: 150, max: 6371, step: 25, default: 6371, unit: 'km', hint: '6371 = Earth · lower bends the horizon/sky harder' },
     },
   },
 
@@ -105,7 +106,7 @@ export const schema = {
       causticScale: { type: 'float', label: 'Caustic scale', min: 0.3, max: 6, step: 0.1, default: 1.6 },
       causticIntensity: { type: 'float', label: 'Caustic ×', min: 0, max: 3, step: 0.05, default: 1.0 },
       floorDepth: { type: 'float', label: 'Seafloor depth', min: 10, max: 140, step: 5, default: 64, unit: 'm' },
-      shoreGlow: { type: 'float', label: 'Shore glow', min: 0, max: 1.5, step: 0.05, default: 0.7, hint: 'warm orange beach halo (aquarium-sky math)' },
+      shoreGlow: { type: 'float', label: 'Shore glow', min: 0, max: 1.5, step: 0.05, default: 0.7, hint: 'cyan + white coastline sampler' },
     },
   },
 
@@ -117,6 +118,7 @@ export const schema = {
     blurb: 'grove population — palms (more sliders later)',
     fields: {
       palmCount: { type: 'int', label: 'Palm count', min: 0, max: 512, step: 1, default: 56, hint: 'palms massed on the fairway/courseway · raise to stress-test' },
+      palmSway: { type: 'float', label: 'Palm sway', min: 0, max: 2, step: 0.02, default: 1, hint: 'multiplies the baked palm wind' },
     },
   },
 

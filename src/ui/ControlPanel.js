@@ -6,7 +6,7 @@
 import { presetGradient } from '../config/presets.js';
 
 export class ControlPanel {
-  constructor({ store, schema, sectionOrder, onAction, onToggle, sticky, presets }) {
+  constructor({ store, schema, sectionOrder, onAction, onToggle, sticky, presets, showWorkshopHint = true }) {
     this.store = store;
     this.schema = schema;
     this.sectionOrder = sectionOrder;
@@ -14,6 +14,7 @@ export class ControlPanel {
     this.onToggle = onToggle;
     this.sticky = sticky || { has: () => false, toggle: () => false };
     this.presets = presets || { slots: {}, save: () => {}, load: () => {} };
+    this.showWorkshopHint = showWorkshopHint;
     this.fieldUpdaters = new Map();
     this.stickyEls = new Map();
     this.collapsed = true;
@@ -40,7 +41,7 @@ export class ControlPanel {
       <kbd>drag</kbd> look
       <kbd>H</kbd> panel
       <kbd>G</kbd> god rays
-      <kbd>T</kbd> workshop
+      ${this.showWorkshopHint ? '<kbd>T</kbd> workshop' : ''}
       <kbd>F</kbd> fps
     `;
     document.body.appendChild(this.hints);

@@ -18,6 +18,7 @@ import { PostFX } from '../fx/PostFX.js';
 // island is negligible against a 100 km shell) and the camera's rotation for
 // ray direction. Fog blends the bounded sea edge into the horizon (PLAN §9).
 const OBSERVER = new THREE.Vector3(0, PLANET.groundRadius + 0.35, 0);
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
 export class Scene {
   constructor(container, store, options = {}) {
@@ -28,6 +29,9 @@ export class Scene {
     this.treeCount = 0;
     this._terrainDirty = false;
     this._regenTimer = null;
+    this._regenToken = 0;
+    this._hasGenerated = false;
+    this.asyncRegenerate = !!options.asyncRegenerate;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -80,12 +84,12 @@ export class Scene {
 
     this.camDirector = new FlyCameraDirector(this.camera, this.renderer.domElement);
 
-    // Lab-only Planet-R hook. God rays are normal ParamStore state.
-    this._exp = { planetR: false, planetRadiusKm: 1200 };
+    // Planet-R used to be an experimental hook; it is now a normal atmosphere
+    // slider, with setExperimental kept as a compatibility shim for scripts.
     this.postfx = new PostFX(this.renderer);
 
     this._applyAll();
-    this.regenerate();
+    if (options.autoGenerate !== false) this.regenerate();
 
     store.subscribe((evt) => this._onParam(evt));
     window.addEventListener('resize', () => this._onResize());
@@ -97,8 +101,105 @@ export class Scene {
     // An explicit regen supersedes any debounced one — prevents a second,
     // late rebuild (the "delayed fade redraw" / double island).
     if (this._regenTimer) { clearTimeout(this._regenTimer); this._regenTimer = null; }
-    this.loader?.start('island asset build', 8);
+    this._regenToken++;
+    this.loader?.start('island asset build', 8, { mode: this._hasGenerated ? 'transition' : 'boot' });
     const s = this.store;
+    const opts = this._buildGenOptions(s);
+    this.loader?.step('params', `seed=${opts.seed} res=${opts.resolution}`);
+
+    const vol = generateIsland(opts);
+    this.vol = vol;
+    this.loader?.step('terrain', `${vol.res}x${vol.res}`);
+
+    this._applyShadowBounds(opts);
+    this.loader?.step('shadow bounds');
+
+    // Island mesh.
+    this.islandGroup.clear();
+    if (this._islandMesh) this._islandMesh.geometry.dispose();
+    this.loader?.step('clear meshes');
+    this._islandMesh = buildIslandMesh(vol, opts.seed);
+    this.islandGroup.add(this._islandMesh);
+    this.loader?.step('island mesh', `${this._islandMesh.geometry.getAttribute('position')?.count || 0} verts`);
+
+    // Sea (rebuilt sized to the new world).
+    if (this.sea) this.scene.remove(this.sea.group);
+    this.sea = new Sea({
+      worldSize: vol.worldSize,
+      volume: vol,
+      radius: opts.radius,
+      seaLevel: opts.seaLevel,
+      causticScale: s.get('water.causticScale'),
+      causticIntensity: s.get('water.causticIntensity'),
+      shoreGlow: s.get('water.shoreGlow'),
+    });
+    this.scene.add(this.sea.group);
+    this._applyWaterLighting();          // fresh sea gets current sun + glint
+    this.loader?.step('sea');
+
+    const planted = this._plantTrees(vol, opts);
+    this.treeCount = planted.treeCount;
+    this.treeCounts = planted.treeCounts;
+    this.loader?.step('trees', `${this.treeCount}`);
+    this.loader?.done('ready');
+    this._hasGenerated = true;
+  }
+
+  async regenerateAsync(label = 'scene rebuild') {
+    if (this._regenTimer) { clearTimeout(this._regenTimer); this._regenTimer = null; }
+    const token = ++this._regenToken;
+    const mode = this._hasGenerated ? 'transition' : 'boot';
+    const stale = () => token !== this._regenToken;
+    const yieldStep = async (name, detail = '') => {
+      this.loader?.step(name, detail);
+      await nextFrame();
+      return stale();
+    };
+
+    this.loader?.start(label, 9, { mode });
+    await nextFrame();
+    if (stale()) return false;
+
+    const opts = this._buildGenOptions(this.store);
+    if (await yieldStep('params', `seed=${opts.seed} res=${opts.resolution}`)) return false;
+
+    const vol = generateIsland(opts);
+    if (await yieldStep('terrain', `${vol.res}x${vol.res}`)) return false;
+
+    const nextIslandMesh = buildIslandMesh(vol, opts.seed);
+    const verts = nextIslandMesh.geometry.getAttribute('position')?.count || 0;
+    if (await yieldStep('island mesh', `${verts} verts`)) {
+      nextIslandMesh.geometry.dispose();
+      return false;
+    }
+
+    const nextSea = new Sea({
+      worldSize: vol.worldSize,
+      volume: vol,
+      radius: opts.radius,
+      seaLevel: opts.seaLevel,
+      causticScale: this.store.get('water.causticScale'),
+      causticIntensity: this.store.get('water.causticIntensity'),
+      shoreGlow: this.store.get('water.shoreGlow'),
+    });
+    if (await yieldStep('sea')) return false;
+
+    const nextTreeGroup = new THREE.Group();
+    nextTreeGroup.name = 'Trees';
+    const planted = this._plantTrees(vol, opts, nextTreeGroup);
+    if (await yieldStep('trees', `${planted.treeCount}`)) return false;
+
+    this._applyShadowBounds(opts);
+    if (await yieldStep('shadow bounds')) return false;
+
+    this._swapGeneratedAssets(vol, nextIslandMesh, nextSea, nextTreeGroup, planted);
+    this.loader?.step('swap');
+    this.loader?.done('ready');
+    this._hasGenerated = true;
+    return true;
+  }
+
+  _buildGenOptions(s) {
     const opts = {
       seed: s.get('voxel.seed') | 0,
       radius: s.get('island.radius'),
@@ -128,51 +229,40 @@ export class Scene {
       },
       palmCount: s.get('tree.palmCount') | 0,
     };
-    opts.maxHeight = opts.lowland + opts.massif;   // derived; used by shadow cam + tree planting
-    this.loader?.step('params', `seed=${opts.seed} res=${opts.resolution}`);
+    opts.maxHeight = opts.lowland + opts.massif;
+    return opts;
+  }
 
-    const vol = generateIsland(opts);
-    this.vol = vol;
-    this.loader?.step('terrain', `${vol.res}x${vol.res}`);
-
-    // Size the shadow camera to the new island (sun sits at dir·6000).
+  _applyShadowBounds(opts) {
     const r = opts.radius * 1.4;
     const sc = this.sun.shadow.camera;
     sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r;
     sc.near = Math.max(50, 6000 - r - opts.maxHeight - 600);
     sc.far = 6000 + r + 600;
     sc.updateProjectionMatrix();
-    this.loader?.step('shadow bounds');
-
-    // Island mesh.
-    this.islandGroup.clear();
-    if (this._islandMesh) this._islandMesh.geometry.dispose();
-    this.loader?.step('clear meshes');
-    this._islandMesh = buildIslandMesh(vol, opts.seed);
-    this.islandGroup.add(this._islandMesh);
-    this.loader?.step('island mesh', `${this._islandMesh.geometry.getAttribute('position')?.count || 0} verts`);
-
-    // Sea (rebuilt sized to the new world).
-    if (this.sea) this.scene.remove(this.sea.group);
-    this.sea = new Sea({
-      worldSize: vol.worldSize,
-      radius: opts.radius,
-      seaLevel: opts.seaLevel,
-      causticScale: s.get('water.causticScale'),
-      causticIntensity: s.get('water.causticIntensity'),
-      shoreGlow: s.get('water.shoreGlow'),
-    });
-    this.scene.add(this.sea.group);
-    this._applyWaterLighting();          // fresh sea gets current sun + glint
-    this.loader?.step('sea');
-
-    this._plantTrees(vol, opts);
-    this.loader?.step('trees', `${this.treeCount}`);
-    this.loader?.done('ready');
   }
 
-  _plantTrees(vol, opts) {
-    this.treeGroup.clear();
+  _swapGeneratedAssets(vol, islandMesh, sea, treeGroup, planted) {
+    this.vol = vol;
+    this.islandGroup.clear();
+    if (this._islandMesh) this._islandMesh.geometry.dispose();
+    this._islandMesh = islandMesh;
+    this.islandGroup.add(this._islandMesh);
+
+    if (this.sea) this.scene.remove(this.sea.group);
+    this.sea = sea;
+    this.scene.add(this.sea.group);
+    this._applyWaterLighting();
+
+    this.scene.remove(this.treeGroup);
+    this.treeGroup = treeGroup;
+    this.scene.add(this.treeGroup);
+    this.treeCount = planted.treeCount;
+    this.treeCounts = planted.treeCounts;
+  }
+
+  _plantTrees(vol, opts, targetGroup = this.treeGroup) {
+    targetGroup.clear();
     const rand = mulberry32((opts.seed * 2654435761) >>> 0);
     const counts = { palm: 0, summer: 0, autumn: 0, conifer: 0, winter: 0 };
 
@@ -190,7 +280,7 @@ export class Scene {
       tree.position.set(wx, y - 0.5, wz);
       tree.scale.setScalar(0.85 + rand() * 0.5);
       tree.rotation.y = rand() * Math.PI * 2;
-      this.treeGroup.add(tree);
+      targetGroup.add(tree);
       counts[kind] = (counts[kind] || 0) + 1;
     };
 
@@ -230,8 +320,7 @@ export class Scene {
       others++;
     }
 
-    this.treeCount = palms + others;
-    this.treeCounts = counts;          // per-species tally → TreeCensus panel
+    return { treeCount: palms + others, treeCounts: counts };
   }
 
   // ---- params ----
@@ -292,6 +381,7 @@ export class Scene {
       ozoneMul: s.get('atmosphere.ozoneMul'),
     });
     this.skyViewLUT.setMieG(s.get('atmosphere.mieG'));
+    this._applyPlanetR();
 
     const hw = s.get('render.horizonWarp');
     this.skyViewLUT.setHorizonWarp(hw);
@@ -320,7 +410,7 @@ export class Scene {
       this._applyAll();
     }
     if (p === '*' || p.startsWith('island.') || p.startsWith('voxel.') || p.startsWith('seasons.') ||
-        p.startsWith('tree.') || p === 'water.seaLevel' || p === 'water.floorDepth') {
+        p === 'tree.palmCount' || p === 'water.seaLevel' || p === 'water.floorDepth') {
       this._scheduleRegen();
     }
     if (this.sea) {
@@ -335,7 +425,11 @@ export class Scene {
 
   _scheduleRegen() {
     if (this._regenTimer) clearTimeout(this._regenTimer);
-    this._regenTimer = setTimeout(() => { this.regenerate(); this._regenTimer = null; }, 260);
+    this._regenTimer = setTimeout(() => {
+      this._regenTimer = null;
+      if (this.asyncRegenerate) this.regenerateAsync('scene rebuild');
+      else this.regenerate();
+    }, 260);
   }
 
   _onResize() {
@@ -345,20 +439,21 @@ export class Scene {
     this.postfx?.setSize();
   }
 
-  // Lab-only Planet-R snapshot. Off ⇒ Earth sky.
+  // Compatibility shim for older smoke scripts. The UI owns this now via the
+  // atmosphere.planetRadiusKm slider.
   setExperimental(st) {
-    const prev = this._exp.planetR ? (this._exp.planetRadiusKm | 0) : -1;
-    this._exp = st || {};
-    const cur = this._exp.planetR ? (this._exp.planetRadiusKm | 0) : -1;
-    if (cur !== prev) this._applyPlanetR();
+    const radius = st?.planetR ? Math.max(150, st.planetRadiusKm || 1200) : PLANET.groundRadius;
+    this.store.set('atmosphere.planetRadiusKm', radius);
   }
 
   // Planet-R restore — sunset's artistic tiny-planet curvature, now a tunable
   // radius. Public LUT setters only (atmosphere code untouched); reversible.
   // OFF restores exact Earth values == the golden look.
   _applyPlanetR() {
-    const on = this._exp.planetR;
-    const R = on ? Math.max(150, this._exp.planetRadiusKm || 1200) : PLANET.groundRadius;  // km
+    const raw = this.store.get('atmosphere.planetRadiusKm');
+    const R = THREE.MathUtils.clamp(raw || PLANET.groundRadius, 150, PLANET.groundRadius);
+    if (this._planetRadiusApplied === R) return;
+    this._planetRadiusApplied = R;
     const thick = PLANET.atmosphereRadius - PLANET.groundRadius;     // keep 100 km shell
     this.skyViewLUT.setGeometry({ planetRadiusKm: R, atmosphereThicknessKm: thick });
     this.backdrop.setGeometry({ planetRadiusKm: R, atmosphereThicknessKm: thick });
@@ -498,15 +593,16 @@ export class Scene {
     tick();
   }
 
-  // Baked palm sway — no panel control (the palm is user-locked); the wind
-  // character rides in each group's userData.sway (speed locked 0.42). Only
-  // palm groups carry it; everything else is skipped. ≤~90 trees → trivial.
+  // Palm sway is baked per tree and globally scaled by tree.palmSway. Only
+  // palm groups carry userData.sway; everything else is skipped.
   _swayTrees() {
     const t = this.elapsed;
+    const swayMul = this.store.get('tree.palmSway') ?? 1;
+    if (swayMul <= 0) return;
     for (const g of this.treeGroup.children) {
       const s = g.userData && g.userData.sway;
       if (!s) continue;
-      const a = Math.sin(t * s.speed + s.phase) * s.amp;
+      const a = Math.sin(t * s.speed + s.phase) * s.amp * swayMul;
       if (s.crown) { s.crown.rotation.z = a; s.crown.rotation.x = a * 0.5; }
       g.rotation.z = a * 0.18;
     }

@@ -10,13 +10,18 @@ import { TreeCensus } from './ui/TreeCensus.js';
 import { BuildConsole } from './ui/BuildConsole.js';
 import { loadSticky, setSticky, clearSticky } from './config/sticky.js';
 import { loadPresets, savePresetToDisk } from './config/presets.js';
-import { GODRAY_RECIPES } from './config/godrayRecipes.js';
-import { GodRayWorkshopPanel, cloneValue } from './ui/GodRayWorkshopPanel.js';
 
 const canvasContainer = document.getElementById('canvas-container');
 const uiRoot = document.getElementById('ui-root');
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
+const buildConsole = new BuildConsole({ parent: uiRoot, label: 'sim build' });
+buildConsole.start('bootstrap', 6, { mode: 'boot' });
+buildConsole.step('ui shell');
+await nextFrame();
 
 // ---- sticky params ----------------------------------------------------------
+buildConsole.step('sticky');
 const stickyMap = await loadSticky();           // { path: pinnedValue }
 const stickyPaths = new Set(Object.keys(stickyMap));
 
@@ -30,16 +35,10 @@ function setAt(obj, path, value) {
 
 // Presets must be available before boot: a reload restores preset 1 (the
 // "default" slot) as the full startup state — every param + camera pose.
+buildConsole.step('presets');
 const presets = await loadPresets();
 let activeBank = 'A';
 const bootPreset = presets['A1'];           // bank A slot 1 = the boot state
-let sceneGodrayBase = null;
-const GODRAY_BLUR_DEFAULTS = {
-  blurEnable: defaultParams.godrays.blurEnable,
-  blurAmount: defaultParams.godrays.blurAmount,
-  blurRadius: defaultParams.godrays.blurRadius,
-  blurPasses: defaultParams.godrays.blurPasses,
-};
 
 function deepMerge(target, source) {
   for (const k in source) {
@@ -69,8 +68,9 @@ if (bootPreset && bootPreset.params) {
 }
 
 const store = new ParamStore(boot);
-const buildConsole = new BuildConsole({ parent: uiRoot, label: 'sim build' });
-const scene = new Scene(canvasContainer, store, { loader: buildConsole });
+buildConsole.step('param store');
+const scene = new Scene(canvasContainer, store, { loader: buildConsole, autoGenerate: false, asyncRegenerate: true });
+buildConsole.step('renderer');
 
 // Reload also restores preset 1's camera pose — set after Scene built its
 // default camera, before the render loop starts.
@@ -123,9 +123,8 @@ function capturePreset() {
 function applyPreset(p) {
   if (!p || !p.params) return false;
   store.fromJSON(p.params);                       // notifies '*'
-  ensureGodrayBlurParams(p.params);
-  captureSceneGodrayBase();
-  scene.regenerate();                             // immediate, supersedes debounce
+  ensureMissingDefaults(p.params);
+  scene.regenerateAsync('scene preset rebuild');  // immediate, supersedes debounce
   if (p.cam) {
     scene.camera.position.fromArray(p.cam.p);
     scene.camera.quaternion.fromArray(p.cam.q);
@@ -166,7 +165,6 @@ const presetApi = {
   setBank, getBank: () => activeBank,
 };
 
-let godrayWorkshop = null;
 const panel = new ControlPanel({
   store,
   schema,
@@ -174,17 +172,10 @@ const panel = new ControlPanel({
   sticky,
   presets: presetApi,
   onAction: handleAction,
-  onToggle: (collapsed) => { if (collapsed) godrayWorkshop?.setCollapsed(true); },
+  showWorkshopHint: false,
 });
 uiRoot.appendChild(panel.root);
-
-godrayWorkshop = new GodRayWorkshopPanel({
-  store,
-  recipes: GODRAY_RECIPES,
-  applyRecipe: applyGodrayRecipe,
-});
-captureSceneGodrayBase();
-godrayWorkshop.setCollapsed(true);
+buildConsole.step('control panel');
 
 const perf = new PerfOverlay({ scene });
 uiRoot.appendChild(perf.root);
@@ -193,6 +184,8 @@ const census = new TreeCensus({ scene });   // per-species planted counts (debug
 uiRoot.appendChild(census.root);
 
 scene.start();
+buildConsole.step('first frame');
+await scene.regenerateAsync('island asset build');
 
 function handleAction(action) {
   switch (action) {
@@ -201,8 +194,7 @@ function handleAction(action) {
       stickyPaths.clear();
       for (const k of Object.keys(stickyMap)) delete stickyMap[k];
       store.reset();
-      scene.regenerate();                         // immediate — no delayed fade pop
-      captureSceneGodrayBase();
+      scene.regenerateAsync('default rebuild');
       panel.refreshSticky();
       panel.flashStatus('default · sticky cleared', 'ok');
       break;
@@ -213,19 +205,17 @@ function handleAction(action) {
         applyPreset(presets['A1']);
       } else {
         store.reset();
-        scene.regenerate();
+        scene.regenerateAsync('baseline rebuild');
       }
       store.set('lighting.bloom', 0);
       store.set('lighting.aerialHaze', 0);
       store.set('godrays.enable', false);
       store.set('godrays.blurEnable', false);
-      captureSceneGodrayBase();
       panel.refreshPresets();
       panel.flashStatus('baseline · FX off', 'ok');
       break;
     case 'random':
       randomize();
-      captureSceneGodrayBase();
       panel.flashStatus('rolled', 'ok');
       break;
     default:
@@ -246,17 +236,24 @@ function randomize() {
   set('island.ridge', rnd(0.4, 1.1));
   set('island.lowland', rnd(18, 50));
   set('island.massif', rnd(90, 240));
-  scene.regenerate();                             // immediate, single rebuild
+  scene.regenerateAsync('random rebuild');
 }
 
-function ensureGodrayBlurParams(snapshot = {}) {
-  const godrays = snapshot.godrays || {};
-  for (const [key, value] of Object.entries(GODRAY_BLUR_DEFAULTS)) {
-    if (godrays[key] === undefined) store.set(`godrays.${key}`, value);
-  }
+function ensureMissingDefaults(snapshot = {}) {
+  const walk = (defaults, snap, prefix = '') => {
+    for (const [key, value] of Object.entries(defaults)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        walk(value, snap?.[key] || {}, path);
+      } else if (snap?.[key] === undefined) {
+        store.set(path, structuredClone(value));
+      }
+    }
+  };
+  walk(defaultParams, snapshot);
 }
 
-// H/B panel · G god rays · T god-ray workshop · F fps · R randomize · Esc closes panel (NOT D — D is WASD).
+// H/B panel · G god rays · F fps · R randomize · Esc closes panel (NOT D — D is WASD).
 // A focused range slider must NOT eat these — only ignore real text entry.
 window.addEventListener('keydown', (event) => {
   if (event.repeat) return;                       // ignore OS key-repeat (was double-randomizing)
@@ -281,10 +278,8 @@ window.addEventListener('keydown', (event) => {
   if (k === 'h' || k === 'b') { event.preventDefault(); blur(); panel.toggle(); }
   else if (k === 'g') {
     event.preventDefault(); blur();
-    const controlsOpen = !panel.collapsed;
     const next = !store.get('godrays.enable');
     store.set('godrays.enable', next);
-    if (controlsOpen) godrayWorkshop.setCollapsed(!next);
     panel.flashStatus(next ? 'god rays on' : 'god rays off', 'ok');
   }
   else if (k === 'escape') {
@@ -292,28 +287,7 @@ window.addEventListener('keydown', (event) => {
     if (!panel.collapsed) panel.toggle();
   }
   else if (k === 'f') { event.preventDefault(); blur(); perf.toggle(); }
-  else if (k === 't') { event.preventDefault(); blur(); }
   else if (k === 'r') { event.preventDefault(); blur(); randomize(); panel.flashStatus('rolled', 'ok'); }
 });
 
-function captureSceneGodrayBase() {
-  sceneGodrayBase = {
-    ...cloneValue(defaultParams.godrays),
-    ...cloneValue(store.get('godrays') || {}),
-  };
-  godrayWorkshop?.setActive(1);
-}
-
-function applyGodrayRecipe(recipe) {
-  if (!recipe) return false;
-  const godrays = recipe.restoreSceneGodrays ? sceneGodrayBase : recipe.godrays;
-  for (const [key, value] of Object.entries(godrays || {})) {
-    store.set(`godrays.${key}`, value);
-  }
-  godrayWorkshop.setActive(recipe.id);
-  panel.flashStatus(`god recipe ${recipe.id} · ${recipe.label}`, 'ok');
-  return true;
-}
-
-window.isometric = { scene, store, panel, perf, census, sticky, presets: presetApi, godrayWorkshop, godrayRecipes: GODRAY_RECIPES, applyGodrayRecipe };
-window.godrayWorkshop = window.isometric;
+window.isometric = { scene, store, panel, perf, census, sticky, presets: presetApi };

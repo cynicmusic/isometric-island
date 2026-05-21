@@ -1,5 +1,5 @@
 export class BuildConsole {
-  constructor({ parent = document.body, label = 'sim build', settleMs = 900 } = {}) {
+  constructor({ parent = document.body, label = 'sim build', settleMs = 600 } = {}) {
     this.label = label;
     this.settleMs = settleMs;
     this._lines = [];
@@ -27,22 +27,25 @@ export class BuildConsole {
     this.barEl = this.root.querySelector('.iso-build-track i');
     this.linesEl = this.root.querySelector('.iso-build-lines');
     parent.appendChild(this.root);
+    this._mode = 'transition';
     this._renderIdle();
   }
 
-  start(label = this.label, total = 8) {
+  start(label = this.label, total = 8, options = {}) {
     if (this._hideTimer) {
       clearTimeout(this._hideTimer);
       this._hideTimer = null;
     }
     this.label = label;
+    this._mode = options.mode || this._mode || 'transition';
     this._active = true;
     this._count = 0;
     this._total = Math.max(1, total | 0);
     this._t0 = performance.now();
     this._last = this._t0;
     this._lines = [];
-    this.root.classList.add('visible', 'active');
+    this.root.classList.remove('boot', 'transition');
+    this.root.classList.add(this._mode, 'visible', 'active');
     this.step('start');
   }
 
@@ -86,6 +89,7 @@ export class BuildConsole {
     this.timeEl.textContent = 'idle';
     this.barEl.style.transform = 'scaleX(0.04)';
     this.linesEl.textContent = 'waiting';
-    this.root.classList.remove('visible', 'active');
+    this.root.classList.remove('visible', 'active', 'boot', 'transition');
+    this.root.classList.add(this._mode || 'transition');
   }
 }

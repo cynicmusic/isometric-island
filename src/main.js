@@ -211,6 +211,8 @@ function handleAction(action) {
       store.set('lighting.aerialHaze', 0);
       store.set('godrays.enable', false);
       store.set('godrays.blurEnable', false);
+      store.set('camera.director', false);
+      store.set('orbitSweep.enable', false);
       panel.refreshPresets();
       panel.flashStatus('baseline · FX off', 'ok');
       break;

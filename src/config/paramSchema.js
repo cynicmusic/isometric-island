@@ -170,6 +170,37 @@ export const schema = {
       blurPasses: { type: 'int', label: 'Blur passes', min: 1, max: 4, step: 1, default: 1, hint: 'extra separable passes; cost is linear' },
     },
   },
+
+  camera: {
+    label: 'camera',
+    icon: '◌',
+    blurb: 'director scaffold · human input always wins',
+    fields: {
+      director: { type: 'bool', label: 'Camera director', default: false, hint: 'AFK handoff scaffold; no path/focus math yet' },
+      focusMountain: { type: 'float', label: 'Mountain focus', min: 0, max: 1, step: 0.01, default: 0.35, hint: 'future focus probability · not wired yet' },
+      focusSky: { type: 'float', label: 'Sky focus', min: 0, max: 1, step: 0.01, default: 0.18, hint: 'future focus probability · not wired yet' },
+      focusGreenway: { type: 'float', label: 'Greenway focus', min: 0, max: 1, step: 0.01, default: 0.16, hint: 'future focus probability · not wired yet' },
+      focusMassif: { type: 'float', label: 'Massif focus', min: 0, max: 1, step: 0.01, default: 0.22, hint: 'future focus probability · not wired yet' },
+      focusValley: { type: 'float', label: 'Valley focus', min: 0, max: 1, step: 0.01, default: 0.14, hint: 'future focus probability · not wired yet' },
+      focusShoreline: { type: 'float', label: 'Shoreline focus', min: 0, max: 1, step: 0.01, default: 0.24, hint: 'future focus probability · not wired yet' },
+      focusPalms: { type: 'float', label: 'Palms focus', min: 0, max: 1, step: 0.01, default: 0.12, hint: 'future focus probability · not wired yet' },
+      focusWater: { type: 'float', label: 'Water focus', min: 0, max: 1, step: 0.01, default: 0.16, hint: 'future focus probability · not wired yet' },
+    },
+  },
+
+  orbitSweep: {
+    label: 'orbit sweep',
+    icon: '↻',
+    blurb: 'slow atmosphere overlay · real sliders stay authoritative',
+    fields: {
+      enable: { type: 'bool', label: 'Orbit sweep', default: false, hint: 'slow hidden controller; touching atmosphere turns it off' },
+      rayleighMul: { type: 'float', label: 'Rayleigh sweep', min: 0, max: 1, step: 0.01, default: 0.08, hint: '10 minute phase around live Rayleigh ×' },
+      mieBeta: { type: 'float', label: 'Mie β sweep', min: 0, max: 1, step: 0.01, default: 0.10, hint: '7 minute phase around live haze thickness' },
+      mieG: { type: 'float', label: 'Mie g sweep', min: 0, max: 1, step: 0.01, default: 0.04, hint: '5 minute phase around live anisotropy' },
+      ozoneMul: { type: 'float', label: 'Ozone sweep', min: 0, max: 1, step: 0.01, default: 0.08, hint: '3 minute phase around live ozone ×' },
+      planetRadiusKm: { type: 'float', label: 'Planet R sweep', min: 0, max: 1, step: 0.01, default: 0.03, hint: '11 minute phase around live horizon curvature' },
+    },
+  },
 };
 
-export const sectionOrder = ['sun', 'atmosphere', 'lighting', 'voxel', 'island', 'seasons', 'water', 'tree', 'render', 'godrays'];
+export const sectionOrder = ['sun', 'atmosphere', 'lighting', 'voxel', 'island', 'seasons', 'water', 'tree', 'render', 'godrays', 'camera', 'orbitSweep'];

@@ -32,8 +32,23 @@ export class FlyCameraDirector {
     this.dom = domElement;
     this._keys = new Map();
     this._cameraEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+    this._lastHumanInput = performance.now();
+    this._pointerDown = false;
+    this._dragging = false;
     this._setupKeyboard();
     this._setupPointer();
+  }
+
+  markHumanInput() {
+    this._lastHumanInput = performance.now();
+  }
+
+  getIdleSeconds(now = performance.now()) {
+    return Math.max(0, (now - this._lastHumanInput) / 1000);
+  }
+
+  hasActiveInput() {
+    return this._keys.size > 0 || this._pointerDown || this._dragging;
   }
 
   _ignore(e) {
@@ -49,43 +64,46 @@ export class FlyCameraDirector {
       // Vertical up is Q-pair via ArrowUp; down stays Q / ArrowDown.
       if (['w', 'a', 's', 'd', 'q', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
         e.preventDefault();
+        this.markHumanInput();
         if (!this._keys.has(key)) this._keys.set(key, performance.now());
       }
     });
     window.addEventListener('keyup', (e) => {
       this._keys.delete(e.key.toLowerCase());
+      this.markHumanInput();
     });
   }
 
   _setupPointer() {
-    let pointerDown = false;
-    let dragging = false;
     let startX = 0, startY = 0, lastX = 0, lastY = 0;
     this.dom.addEventListener('pointerdown', (e) => {
       if (e.target.closest && e.target.closest('#ui-root')) return;
-      pointerDown = true;
-      dragging = false;
+      this._pointerDown = true;
+      this._dragging = false;
+      this.markHumanInput();
       startX = e.clientX; startY = e.clientY;
       lastX = e.clientX; lastY = e.clientY;
     });
     window.addEventListener('pointerup', () => {
-      if (pointerDown || dragging) {
-        pointerDown = false;
+      if (this._pointerDown || this._dragging) {
+        this._pointerDown = false;
         this.dom.style.cursor = 'crosshair';
-        dragging = false;
+        this._dragging = false;
+        this.markHumanInput();
       }
     });
     window.addEventListener('pointermove', (e) => {
-      if (!pointerDown && !dragging) return;
+      if (!this._pointerDown && !this._dragging) return;
       const dx = THREE.MathUtils.clamp((e.clientX - lastX) * 0.01, -0.8, 0.8);
       const dy = THREE.MathUtils.clamp((e.clientY - lastY) * 0.01, -0.8, 0.8);
       const moved = Math.hypot(e.clientX - startX, e.clientY - startY);
       lastX = e.clientX; lastY = e.clientY;
-      if (!dragging) {
+      if (!this._dragging) {
         if (moved < 4) return;
-        dragging = true;
+        this._dragging = true;
         this.dom.style.cursor = 'none';
       }
+      this.markHumanInput();
       this._cameraEuler.setFromQuaternion(this.camera.quaternion);
       this._cameraEuler.y -= dx * 0.08;
       this._cameraEuler.x = Math.max(-1.25, Math.min(1.15, this._cameraEuler.x - dy * 0.08));
@@ -94,6 +112,7 @@ export class FlyCameraDirector {
     this.dom.addEventListener('wheel', (e) => {
       if (e.target.closest && e.target.closest('#ui-root')) return;
       e.preventDefault();
+      this.markHumanInput();
       const wheel = THREE.MathUtils.clamp(e.deltaY, -180, 180);
       const dir = new THREE.Vector3();
       this.camera.getWorldDirection(dir);
@@ -103,6 +122,7 @@ export class FlyCameraDirector {
 
   update(dt) {
     if (!this._keys.size) return;
+    this.markHumanInput();
     const frameDt = Math.min(dt, KEYBOARD_CAMERA.maxFrameSeconds);
     const now = performance.now();
     let heldSeconds = 0;

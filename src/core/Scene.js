@@ -4,6 +4,8 @@ import { SkyViewLUT } from '../atmosphere/SkyViewLUT.js';
 import { SkyBackdrop } from '../atmosphere/SkyBackdrop.js';
 import { PLANET } from '../atmosphere/constants.js';
 import { FlyCameraDirector } from '../camera/FlyCameraDirector.js';
+import { CameraDirector } from '../camera/CameraDirector.js';
+import { OrbitSweepController } from '../automation/OrbitSweepController.js';
 import { generateIsland } from '../gen/terrain.js';
 import { buildIslandMesh } from '../voxel/mesher.js';
 import { Sea } from '../water/Sea.js';
@@ -84,6 +86,8 @@ export class Scene {
     this.sea = null;
 
     this.camDirector = new FlyCameraDirector(this.camera, this.renderer.domElement);
+    this.autoCameraDirector = new CameraDirector(this.camera, this.camDirector, store);
+    this.orbitSweep = new OrbitSweepController(store, this);
 
     // Planet-R used to be an experimental hook; it is now a normal atmosphere
     // slider, with setExperimental kept as a compatibility shim for scripts.
@@ -392,18 +396,19 @@ export class Scene {
     this.scene.fog.color.set('#d99250').lerp(new THREE.Color('#acc6cf'), day2);
     this._skyDirty = true;
 
+    const atmosphere = this._effectiveAtmosphere();
     this.transmittanceLUT.setAtmosphere({
-      rayleighMul: s.get('atmosphere.rayleighMul'),
-      mieBeta: s.get('atmosphere.mieBeta'),
-      ozoneMul: s.get('atmosphere.ozoneMul'),
+      rayleighMul: atmosphere.rayleighMul,
+      mieBeta: atmosphere.mieBeta,
+      ozoneMul: atmosphere.ozoneMul,
     });
     this.skyViewLUT.setAtmosphere({
-      rayleighMul: s.get('atmosphere.rayleighMul'),
-      mieBeta: s.get('atmosphere.mieBeta'),
-      ozoneMul: s.get('atmosphere.ozoneMul'),
+      rayleighMul: atmosphere.rayleighMul,
+      mieBeta: atmosphere.mieBeta,
+      ozoneMul: atmosphere.ozoneMul,
     });
-    this.skyViewLUT.setMieG(s.get('atmosphere.mieG'));
-    this._applyPlanetR();
+    this.skyViewLUT.setMieG(atmosphere.mieG);
+    this._applyPlanetR(atmosphere.planetRadiusKm);
 
     const hw = s.get('render.horizonWarp');
     this.skyViewLUT.setHorizonWarp(hw);
@@ -452,6 +457,22 @@ export class Scene {
     }
   }
 
+  _effectiveAtmosphere() {
+    const a = this._atmosphereOverride || {};
+    return {
+      rayleighMul: a.rayleighMul ?? this.store.get('atmosphere.rayleighMul'),
+      mieBeta: a.mieBeta ?? this.store.get('atmosphere.mieBeta'),
+      mieG: a.mieG ?? this.store.get('atmosphere.mieG'),
+      ozoneMul: a.ozoneMul ?? this.store.get('atmosphere.ozoneMul'),
+      planetRadiusKm: a.planetRadiusKm ?? this.store.get('atmosphere.planetRadiusKm'),
+    };
+  }
+
+  setAtmosphereOverride(values) {
+    this._atmosphereOverride = values || null;
+    this._applyAll();
+  }
+
   _scheduleRegen() {
     if (this._regenTimer) clearTimeout(this._regenTimer);
     this._regenTimer = setTimeout(() => {
@@ -478,8 +499,7 @@ export class Scene {
   // Planet-R restore — sunset's artistic tiny-planet curvature, now a tunable
   // radius. Public LUT setters only (atmosphere code untouched); reversible.
   // OFF restores exact Earth values == the golden look.
-  _applyPlanetR() {
-    const raw = this.store.get('atmosphere.planetRadiusKm');
+  _applyPlanetR(raw = this.store.get('atmosphere.planetRadiusKm')) {
     const R = THREE.MathUtils.clamp(raw || PLANET.groundRadius, 150, PLANET.groundRadius);
     if (this._planetRadiusApplied === R) return;
     this._planetRadiusApplied = R;
@@ -608,6 +628,8 @@ export class Scene {
       this.renderer.info.reset();
 
       this.camDirector.update(dt);
+      this.autoCameraDirector.update(dt);
+      this.orbitSweep.update(dt);
       this.sea?.update(this.elapsed, this.camera.position);
 
       this.camera.updateMatrixWorld();

@@ -14,14 +14,22 @@ import { makeSeasonField, SEASON } from './seasons.js';
 
 export function generateIsland(opts) {
   const {
-    seed, radius, shape, resolution, lowland, massif, terraceStep, warp, ridge,
-    beachWidth, valleyDepth, valleyWidth, seaLevel, floorDepth, seasons,
+    seed, radius, shape, resolution, lowland, massif, massifSharpness,
+    massifOffsetX, massifOffsetZ, terraceStep, warp, ridge, beachWidth,
+    valleyDepth, valleyWidth, seaLevel, floorDepth, floorShape, floorRoughness,
+    deltaFloor, seasons,
   } = opts;
 
   // Decoupled relief: `lowland` is the rolling-hill amplitude of the bulk of
   // the island; `massif` is the localized mountain uplift on top. maxHeight
   // is just their sum, used for normalisation (snow line etc).
   const maxHeight = lowland + massif;
+  const peakSharp = Math.max(0.45, massifSharpness ?? 1);
+  const peakOffsetX = Math.max(-0.45, Math.min(0.45, massifOffsetX ?? 0)) * radius;
+  const peakOffsetZ = Math.max(-0.45, Math.min(0.45, massifOffsetZ ?? 0)) * radius;
+  const seaShelfPow = Math.max(0.35, floorShape ?? 0.85);
+  const seaRough = Math.max(0, floorRoughness ?? 1);
+  const deltaFollow = Math.max(0, Math.min(1, deltaFloor ?? 0));
 
   // Must comfortably exceed the island so it isn't clipped AND leaves a
   // seafloor ring for the circular opacity fade to dissolve.
@@ -95,7 +103,7 @@ export function generateIsland(opts) {
     const a0 = rnd() * Math.PI * 2;
     const d0 = radius * (0.08 + rnd() * 0.24);          // off-centre, off the rim
     out.push({
-      cx: Math.cos(a0) * d0, cz: Math.sin(a0) * d0,
+      cx: Math.cos(a0) * d0 + peakOffsetX, cz: Math.sin(a0) * d0 + peakOffsetZ,
       h: massif * (0.80 + rnd() * 0.16), sig: radius * (0.13 + rnd() * 0.05),
       rot: rnd() * Math.PI * 2, sk: rnd(), spur: 3 + Math.floor(rnd() * 4),
     });
@@ -104,7 +112,7 @@ export function generateIsland(opts) {
       const a = a0 + (rnd() - 0.5) * 2.6;
       const dd = radius * (0.22 + rnd() * 0.30);
       out.push({
-        cx: Math.cos(a) * dd, cz: Math.sin(a) * dd,
+        cx: Math.cos(a) * dd + peakOffsetX, cz: Math.sin(a) * dd + peakOffsetZ,
         h: massif * (0.20 + rnd() * 0.20), sig: radius * (0.09 + rnd() * 0.05),
         rot: rnd() * Math.PI * 2, sk: rnd(), spur: 3 + Math.floor(rnd() * 3),
       });
@@ -121,7 +129,7 @@ export function generateIsland(opts) {
       const dx = x - p.cx, dz = z - p.cz;
       const g = Math.exp(-(dx * dx + dz * dz) / (2 * p.sig * p.sig));
       if (g < 0.0025) continue;
-      const env = Math.pow(g, 1.22);                    // peakier than a dome
+      const env = Math.pow(g, 1.22 * peakSharp);        // peakier than a dome
       const cr = Math.cos(p.rot), sr = Math.sin(p.rot);
       const lx = dx * cr - dz * sr, lz = dx * sr + dz * cr;
       const rg = ridgedFbm2(lx * 0.011 + p.sk * 7, lz * 0.011 - p.sk * 4,
@@ -234,8 +242,14 @@ export function generateIsland(opts) {
       return surf - channelCarve(x, z);
     }
     const seaFrac = (0.5 - c) * 2;                     // 0 at coast → 1 open sea
-    const ripple = (fbm2(x * 0.01, z * 0.01, { seed: seed + 90, octaves: 3 }) - 0.5) * 4;
-    return seaLevel - 1.0 - Math.pow(seaFrac, 0.85) * floorDepth + ripple;
+    const ripple = (fbm2(x * 0.01, z * 0.01, { seed: seed + 90, octaves: 3 }) - 0.5) * 4 * seaRough;
+    let floor = seaLevel - 1.0 - Math.pow(seaFrac, seaShelfPow) * floorDepth + ripple;
+    if (hasChannel && deltaFollow > 0) {
+      const ch = channelAt(x, z);
+      const mouth = smooth01(0.58, 1.0, ch.t);
+      floor -= valleyDepth * deltaFollow * ch.field * mouth * 0.85;
+    }
+    return floor;
   }
 
   for (let j = 0; j < resolution; j++) {

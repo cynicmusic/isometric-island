@@ -23,6 +23,7 @@ uniform float uTime;
 uniform vec3 uCausticColor;
 uniform float uCausticIntensity;
 uniform float uCausticScale;
+uniform float uCausticOpacity;
 uniform float uFadeRadius;
 varying vec3 vWorldPos;
 
@@ -69,7 +70,7 @@ void main() {
   float rad = length(vWorldPos.xz);
   float fade = 1.0 - smoothstep(uFadeRadius * 0.55, uFadeRadius, rad);
   vec3 color = uCausticColor * c * uCausticIntensity;
-  gl_FragColor = vec4(color, c * 0.22 * fade);
+  gl_FragColor = vec4(color, c * uCausticOpacity * fade);
 }
 `;
 
@@ -93,18 +94,12 @@ uniform vec3 uColor;
 varying vec2 vUv;
 varying vec3 vWorldPos;
 
-float hash21(vec2 p) {
-  p = fract(p * vec2(123.34, 345.45));
-  p += dot(p, p + 34.345);
-  return fract(p.x * p.y);
-}
-
 void main() {
   float across = 1.0 - smoothstep(0.76, 1.0, abs(vUv.x - 0.5) * 2.0);
   float coast = smoothstep(0.02, 0.16, vUv.y) * (1.0 - smoothstep(0.88, 1.0, vUv.y));
   float outward = exp(-vUv.y * uFalloff);
-  float n = hash21(floor(vWorldPos.xz * 0.08));
-  float pulse = 0.88 + 0.08 * sin(uTime * 0.9 + n * 6.2831)
+  float n = sin(vWorldPos.x * 0.021 + vWorldPos.z * 0.017);
+  float pulse = 0.90 + 0.06 * sin(uTime * 0.9 + n * 3.14159)
     + 0.04 * sin(uTime * 1.7 + vWorldPos.x * 0.013 + vWorldPos.z * 0.017);
   float a = uAmount * uAlpha * across * coast * outward * pulse;
   gl_FragColor = vec4(uColor, a);
@@ -220,10 +215,12 @@ export class Sea {
       color: new THREE.Color('#1f93a4'),
       transparent: true,
       opacity: 0.5,
+      depthWrite: false,
       roughness: 0.18,
       metalness: 0.0,
       side: THREE.DoubleSide,
     });
+    this.surfaceMat.forceSinglePass = true;
     const fade0 = params.radius * 1.4, fade1 = R * 0.96;
     // Analytic sun-glint: a stretched specular streak where the sun reflects
     // off the flat water plane. Pure in-shader (no extra pass) — mobile-cheap.
@@ -273,6 +270,7 @@ export class Sea {
         uCausticColor: { value: new THREE.Color(0.18, 0.5, 0.55) },
         uCausticIntensity: { value: params.causticIntensity },
         uCausticScale: { value: params.causticScale },
+        uCausticOpacity: { value: params.causticOpacity ?? 0.22 },
         uFadeRadius: { value: params.radius * 1.15 },
       },
       transparent: true,
@@ -294,6 +292,11 @@ export class Sea {
   _makeShoreGlow(params) {
     const samples = sampleCoastline(params.volume, params.seaLevel);
     if (!samples.length) return null;
+    const glowWidth = THREE.MathUtils.clamp(params.shoreGlowWidth ?? 1, 0.25, 4);
+    const follow = THREE.MathUtils.clamp(params.shoreGlowFollow ?? 1, 0, 1);
+    // Low follow deliberately overlaps adjacent cells so the glow reads as a
+    // soft continuous coastal wash; high follow hugs the sampled voxel coast.
+    const along = THREE.MathUtils.lerp(3.6, 1.0, follow);
 
     const group = new THREE.Group();
     group.name = 'CoastlineGlow';
@@ -305,6 +308,7 @@ export class Sea {
       depthWrite: false,
       depthTest: true,
       side: THREE.DoubleSide,
+      forceSinglePass: true,
     };
 
     const makeLayer = (name, color, alpha, falloff, dims, yOffset) => {
@@ -330,8 +334,16 @@ export class Sea {
     };
 
     this._shoreGlowMats = [
-      makeLayer('CoastGlowCyan', '#21e6ff', 0.34, 2.2, { widthMul: 2.4, depthMul: 5.2, insetMul: 0.20 }, 0.08),
-      makeLayer('CoastGlowWhite', '#f4ffff', 0.22, 4.8, { widthMul: 1.25, depthMul: 1.9, insetMul: 0.05 }, 0.11),
+      makeLayer('CoastGlowCyan', '#21e6ff', 0.34, 2.2 / glowWidth, {
+        widthMul: 2.4 * along,
+        depthMul: 5.2 * glowWidth,
+        insetMul: THREE.MathUtils.lerp(0.0, 0.20, follow),
+      }, 0.08),
+      makeLayer('CoastGlowWhite', '#f4ffff', 0.22, 4.8 / glowWidth, {
+        widthMul: 1.25 * along,
+        depthMul: 1.9 * glowWidth,
+        insetMul: THREE.MathUtils.lerp(0.0, 0.05, follow),
+      }, 0.11),
     ];
     return group;
   }
@@ -340,9 +352,10 @@ export class Sea {
     this.surface.position.y = y;
     this.caustic.position.y = y - 0.5;
   }
-  setCaustic(scale, intensity) {
+  setCaustic(scale, intensity, opacity = 0.22) {
     this.causticMat.uniforms.uCausticScale.value = scale;
     this.causticMat.uniforms.uCausticIntensity.value = intensity;
+    this.causticMat.uniforms.uCausticOpacity.value = opacity;
   }
   setShoreGlow(amount) {
     this._glowBase = THREE.MathUtils.clamp(amount, 0, 1.5);

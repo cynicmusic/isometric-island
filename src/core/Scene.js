@@ -39,6 +39,7 @@ export class Scene {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = store.get('render.exposure');
+    this.renderer.info.autoReset = false;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
@@ -129,9 +130,13 @@ export class Scene {
       volume: vol,
       radius: opts.radius,
       seaLevel: opts.seaLevel,
+      floorDepth: opts.floorDepth,
       causticScale: s.get('water.causticScale'),
       causticIntensity: s.get('water.causticIntensity'),
+      causticOpacity: s.get('water.causticOpacity'),
       shoreGlow: s.get('water.shoreGlow'),
+      shoreGlowWidth: s.get('water.shoreGlowWidth'),
+      shoreGlowFollow: s.get('water.shoreGlowFollow'),
     });
     this.scene.add(this.sea.group);
     this._applyWaterLighting();          // fresh sea gets current sun + glint
@@ -178,9 +183,13 @@ export class Scene {
       volume: vol,
       radius: opts.radius,
       seaLevel: opts.seaLevel,
+      floorDepth: opts.floorDepth,
       causticScale: this.store.get('water.causticScale'),
       causticIntensity: this.store.get('water.causticIntensity'),
+      causticOpacity: this.store.get('water.causticOpacity'),
       shoreGlow: this.store.get('water.shoreGlow'),
+      shoreGlowWidth: this.store.get('water.shoreGlowWidth'),
+      shoreGlowFollow: this.store.get('water.shoreGlowFollow'),
     });
     if (await yieldStep('sea')) return false;
 
@@ -207,6 +216,9 @@ export class Scene {
       resolution: s.get('voxel.resolution') | 0,
       lowland: s.get('island.lowland'),
       massif: s.get('island.massif'),
+      massifSharpness: s.get('island.massifSharpness'),
+      massifOffsetX: s.get('island.massifOffsetX'),
+      massifOffsetZ: s.get('island.massifOffsetZ'),
       terraceStep: s.get('voxel.terraceStep'),
       warp: s.get('island.warp'),
       ridge: s.get('island.ridge'),
@@ -215,6 +227,9 @@ export class Scene {
       valleyWidth: s.get('island.valleyWidth'),
       seaLevel: s.get('water.seaLevel'),
       floorDepth: s.get('water.floorDepth'),
+      floorShape: s.get('water.floorShape'),
+      floorRoughness: s.get('water.floorRoughness'),
+      deltaFloor: s.get('water.deltaFloor'),
       seasons: {
         sweepDeg: s.get('seasons.sweepDeg'),
         summerEnd: s.get('seasons.summerEnd'),
@@ -228,6 +243,8 @@ export class Scene {
         bunkerSize: s.get('seasons.bunkerSize'),
       },
       palmCount: s.get('tree.palmCount') | 0,
+      palmLine: s.get('tree.palmLine'),
+      mixedTreeCount: s.get('tree.mixedTreeCount') | 0,
     };
     opts.maxHeight = opts.lowland + opts.massif;
     return opts;
@@ -287,6 +304,7 @@ export class Scene {
     // ---- palms: explicit count (tree.palmCount, up to 512) — they
     // concentrate on the fairway / courseway and beach (perf-test knob).
     const palmTarget = Math.max(0, Math.min(512, opts.palmCount | 0));
+    const palmLine = Math.max(0.18, Math.min(0.9, opts.palmLine ?? 0.58));
     let palms = 0, guard = 0;
     const palmCap = palmTarget * 60 + 400;
     while (palms < palmTarget && guard < palmCap) {
@@ -295,6 +313,10 @@ export class Scene {
       const idx = vol.idx(i, j);
       if (!inBand(idx)) continue;
       const m = vol.material[idx];
+      const y = vol.heightVox[idx] * vol.vstep;
+      const alt = (y - opts.seaLevel) / Math.max(1, opts.maxHeight);
+      if (alt > palmLine) continue;
+      if (m === MAT.SNOW || m === MAT.GRASSY_SNOW || m === MAT.DIRT) continue;
       if (!(m === MAT.FAIRWAY || m === MAT.SAND) && rand() > 0.30) continue;  // bias to greens/beach
       place('palm', i, j, idx);
       palms++;
@@ -309,7 +331,7 @@ export class Scene {
       if (season === SEASON.AUTUMN) return 'autumn';
       return 'summer';
     };
-    const otherTarget = 34;
+    const otherTarget = Math.max(0, Math.min(256, opts.mixedTreeCount ?? 34));
     let others = 0; guard = 0;
     while (others < otherTarget && guard < otherTarget * 40) {
       guard++;
@@ -410,12 +432,19 @@ export class Scene {
       this._applyAll();
     }
     if (p === '*' || p.startsWith('island.') || p.startsWith('voxel.') || p.startsWith('seasons.') ||
-        p === 'tree.palmCount' || p === 'water.seaLevel' || p === 'water.floorDepth') {
+        p === 'tree.palmCount' || p === 'tree.palmLine' || p === 'tree.mixedTreeCount' ||
+        p === 'water.seaLevel' || p === 'water.floorDepth' || p === 'water.floorShape' ||
+        p === 'water.floorRoughness' || p === 'water.deltaFloor' ||
+        p === 'water.shoreGlowWidth' || p === 'water.shoreGlowFollow') {
       this._scheduleRegen();
     }
     if (this.sea) {
-      if (p === '*' || p === 'water.causticScale' || p === 'water.causticIntensity') {
-        this.sea.setCaustic(this.store.get('water.causticScale'), this.store.get('water.causticIntensity'));
+      if (p === '*' || p === 'water.causticScale' || p === 'water.causticIntensity' || p === 'water.causticOpacity') {
+        this.sea.setCaustic(
+          this.store.get('water.causticScale'),
+          this.store.get('water.causticIntensity'),
+          this.store.get('water.causticOpacity'),
+        );
       }
       if (p === '*' || p === 'water.shoreGlow') {
         this.sea.setShoreGlow(this.store.get('water.shoreGlow'));
@@ -576,6 +605,7 @@ export class Scene {
       this._raf = requestAnimationFrame(tick);
       const dt = Math.min(this.clock.getDelta(), 1 / 20);
       this.elapsed += dt;
+      this.renderer.info.reset();
 
       this.camDirector.update(dt);
       this.sea?.update(this.elapsed, this.camera.position);

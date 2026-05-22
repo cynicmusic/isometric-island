@@ -133,6 +133,27 @@ export const schema = {
     },
   },
 
+  shadows: {
+    label: 'shadows',
+    icon: '◒',
+    blurb: 'two sun shadow maps · fine layer plus coarse motion layer',
+    fields: {
+      enable: { type: 'bool', label: 'Shadows', default: true, hint: 'X toggles shadow casting without killing sun light' },
+      primaryEnable: { type: 'bool', label: 'Primary layer', default: true, hint: 'main sun shadow map' },
+      primarySize: { type: 'int', label: 'Primary map', min: 512, max: 8192, step: 512, default: 8192, hint: 'texels per side; GPU clamps if unsupported' },
+      primaryCoverage: { type: 'float', label: 'Primary span', min: 0.35, max: 1.6, step: 0.01, default: 1.28, hint: 'smaller = sharper but can clip island-edge shadows' },
+      secondaryEnable: { type: 'bool', label: 'Coarse layer', default: true, hint: 'second sun shadow map for low-res dance' },
+      secondarySize: { type: 'int', label: 'Coarse map', min: 512, max: 8192, step: 512, default: 2560, hint: 'try 512, 1024, 2048 against the primary' },
+      secondaryCoverage: { type: 'float', label: 'Coarse span', min: 0.35, max: 1.8, step: 0.01, default: 1, hint: 'coarse layer shadow-camera coverage' },
+      secondaryMix: { type: 'float', label: 'Coarse mix', min: 0, max: 1, step: 0.01, default: 1, hint: 'add mode: amount of extra coarse-map sun' },
+      blendMode: { type: 'int', label: 'Blend mode', min: 0, max: 1, step: 1, default: 1, labels: ['split', 'add'], hint: 'split keeps total light stable · add is stylized and brighter' },
+      filterMode: { type: 'int', label: 'Filter', min: 0, max: 2, step: 1, default: 1, labels: ['hard', 'pcf', 'soft'], hint: 'shadow-map sampling kernel' },
+      softness: { type: 'float', label: 'Softness', min: 0, max: 8, step: 0.1, default: 1.7, hint: 'shadow radius used by filtered modes' },
+      bias: { type: 'float', label: 'Bias', min: -0.005, max: 0.005, step: 0.0001, precision: 4, default: -0.0006, hint: 'depth offset; fights acne vs detached shadows' },
+      normalBias: { type: 'float', label: 'Normal bias', min: 0, max: 6, step: 0.05, default: 2.2, hint: 'offset along voxel normals; original default was 2.2' },
+    },
+  },
+
   render: {
     label: 'render',
     icon: '◯',
@@ -191,16 +212,17 @@ export const schema = {
   orbitSweep: {
     label: 'orbit sweep',
     icon: '↻',
-    blurb: 'slow atmosphere overlay · real sliders stay authoritative',
+    blurb: 'sun elevation + azimuth overlay · real sliders stay authoritative',
     fields: {
-      enable: { type: 'bool', label: 'Orbit sweep', default: false, hint: 'slow hidden controller; touching atmosphere turns it off' },
-      rayleighMul: { type: 'float', label: 'Rayleigh sweep', min: 0, max: 1, step: 0.01, default: 0.08, hint: '10 minute phase around live Rayleigh ×' },
-      mieBeta: { type: 'float', label: 'Mie β sweep', min: 0, max: 1, step: 0.01, default: 0.10, hint: '7 minute phase around live haze thickness' },
-      mieG: { type: 'float', label: 'Mie g sweep', min: 0, max: 1, step: 0.01, default: 0.04, hint: '5 minute phase around live anisotropy' },
-      ozoneMul: { type: 'float', label: 'Ozone sweep', min: 0, max: 1, step: 0.01, default: 0.08, hint: '3 minute phase around live ozone ×' },
-      planetRadiusKm: { type: 'float', label: 'Planet R sweep', min: 0, max: 1, step: 0.01, default: 0.03, hint: '11 minute phase around live horizon curvature' },
+      enable: { type: 'bool', label: 'Orbit sweep', default: false, hint: 'slow hidden sun path; touching sun controls turns it off' },
+      speed: { type: 'float', label: 'Sim speed', min: 0, max: 4, step: 0.001, precision: 3, default: 1.0, curve: 2.4, uiStep: 0.001, hint: 'curved time multiplier · most slider travel lives below 1.2' },
+      elevationDeg: { type: 'float', label: 'Elevation', min: -10, max: 90, step: 0.01, precision: 2, default: 26, unit: '°', pin: false, hint: 'runtime sweep value; not saved to presets' },
+      azimuthDeg: { type: 'float', label: 'Azimuth', min: -180, max: 180, step: 0.01, precision: 2, default: -84, unit: '°', pin: false, hint: 'runtime sweep value; wraps through 360° under the hood' },
+      elevationSpeed: { type: 'float', label: 'Elevation speed', min: 0, max: 24, step: 0.01, default: 4, hint: 'multiplies sim speed for sunset cycling' },
+      azimuthSpeed: { type: 'float', label: 'Azimuth speed', min: 0, max: 8, step: 0.01, default: 0.5, hint: 'multiplies sim speed for horizontal orbit drift' },
+      elevationRange: { type: 'range', label: 'Elevation arc', min: -10, max: 90, step: 0.5, default: [2, 50], unit: '°', handle: 'ticks', hint: 'sweep band; current elevation can drift outside before re-entering' },
     },
   },
 };
 
-export const sectionOrder = ['sun', 'atmosphere', 'lighting', 'voxel', 'island', 'seasons', 'water', 'tree', 'render', 'godrays', 'camera', 'orbitSweep'];
+export const sectionOrder = ['orbitSweep', 'sun', 'atmosphere', 'lighting', 'voxel', 'island', 'seasons', 'water', 'tree', 'shadows', 'render', 'godrays', 'camera'];

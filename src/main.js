@@ -14,6 +14,7 @@ import { loadPresets, savePresetToDisk } from './config/presets.js';
 const canvasContainer = document.getElementById('canvas-container');
 const uiRoot = document.getElementById('ui-root');
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+const PRESET_RUNTIME_SECTIONS = new Set(['orbitSweep']);
 
 const buildConsole = new BuildConsole({ parent: uiRoot, label: 'sim build' });
 buildConsole.start('bootstrap', 6, { mode: 'boot' });
@@ -53,6 +54,12 @@ function deepMerge(target, source) {
   return target;
 }
 
+function clonePresetParams(params) {
+  const out = structuredClone(params || {});
+  for (const section of PRESET_RUNTIME_SECTIONS) delete out[section];
+  return out;
+}
+
 // Preset 1 is the explicit full-state startup snapshot: when it exists it
 // wins OUTRIGHT, so a reload reproduces it EXACTLY — identical to pressing
 // "1" at runtime (which is store.fromJSON(preset), no sticky). Overlaying
@@ -61,7 +68,7 @@ function deepMerge(target, source) {
 // Sticky still governs the no-preset boot and all runtime pinning.
 const boot = structuredClone(defaultParams);
 if (bootPreset && bootPreset.params) {
-  deepMerge(boot, bootPreset.params);
+  deepMerge(boot, clonePresetParams(bootPreset.params));
 } else {
   if (!stickyPaths.has('voxel.seed')) setAt(boot, 'voxel.seed', 1 + ((Math.random() * 99998) | 0));
   for (const [p, v] of Object.entries(stickyMap)) setAt(boot, p, v);
@@ -114,7 +121,7 @@ const sticky = {
 function capturePreset() {
   const c = scene.camera;
   return {
-    params: store.toJSON(),
+    params: clonePresetParams(store.toJSON()),
     cam: { p: c.position.toArray(), q: c.quaternion.toArray() },
     t: Date.now(),
   };
@@ -122,8 +129,9 @@ function capturePreset() {
 
 function applyPreset(p) {
   if (!p || !p.params) return false;
-  store.fromJSON(p.params);                       // notifies '*'
-  ensureMissingDefaults(p.params);
+  const params = clonePresetParams(p.params);
+  store.fromJSON(params);                         // notifies '*'
+  ensureMissingDefaults(params);
   scene.regenerateAsync('scene preset rebuild');  // immediate, supersedes debounce
   if (p.cam) {
     scene.camera.position.fromArray(p.cam.p);
@@ -245,6 +253,7 @@ function ensureMissingDefaults(snapshot = {}) {
   const walk = (defaults, snap, prefix = '') => {
     for (const [key, value] of Object.entries(defaults)) {
       const path = prefix ? `${prefix}.${key}` : key;
+      if (!prefix && PRESET_RUNTIME_SECTIONS.has(key)) continue;
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         walk(value, snap?.[key] || {}, path);
       } else if (snap?.[key] === undefined) {
@@ -283,6 +292,12 @@ window.addEventListener('keydown', (event) => {
     const next = !store.get('godrays.enable');
     store.set('godrays.enable', next);
     panel.flashStatus(next ? 'god rays on' : 'god rays off', 'ok');
+  }
+  else if (k === 'x') {
+    event.preventDefault(); blur();
+    const next = !store.get('shadows.enable');
+    store.set('shadows.enable', next);
+    panel.flashStatus(next ? 'shadows on' : 'shadows off', 'ok');
   }
   else if (k === 'escape') {
     event.preventDefault(); blur();

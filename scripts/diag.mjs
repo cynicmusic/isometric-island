@@ -1,8 +1,7 @@
 // Diagnostic probe — load page, dump every console message + error + failed
-// request + a DOM/state probe. Borrows Playwright from the fire-whisp install
-// (same pattern as sunset/scripts/diag.mjs).
+// request + a DOM/state probe.
 
-import { chromium } from '../../fire-whisp/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';

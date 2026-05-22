@@ -21,6 +21,7 @@ import { PostFX } from '../fx/PostFX.js';
 // ray direction. Fog blends the bounded sea edge into the horizon (PLAN §9).
 const OBSERVER = new THREE.Vector3(0, PLANET.groundRadius + 0.35, 0);
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+const SHADOW_FILTER_TYPES = [THREE.BasicShadowMap, THREE.PCFShadowMap, THREE.PCFSoftShadowMap];
 
 export class Scene {
   constructor(container, store, options = {}) {
@@ -65,13 +66,13 @@ export class Scene {
 
     // Lights — directional sun + hemisphere fill (the §15 faceted-voxel
     // mitigation: flat normals stay readable under analytic sky light).
-    this.sun = new THREE.DirectionalLight(0xfff2dc, 2.4);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.bias = -0.0006;
-    this.sun.shadow.normalBias = 2.2;          // chunky flat-shaded voxels
+    this.sun = this._makeSunLight('SunPrimary');
+    this.shadowSun = this._makeSunLight('SunCoarse');
+    this.sunLayers = [this.sun, this.shadowSun];
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
+    this.scene.add(this.shadowSun);
+    this.scene.add(this.shadowSun.target);
     this.hemi = new THREE.HemisphereLight(0xbfe3ff, 0x5a4630, 0.34);
     this.scene.add(this.hemi);
     this.ambient = new THREE.AmbientLight(0xffffff, 0.05);
@@ -93,12 +94,23 @@ export class Scene {
     // slider, with setExperimental kept as a compatibility shim for scripts.
     this.postfx = new PostFX(this.renderer);
 
+    this._applyShadowSettings();
     this._applyAll();
     if (options.autoGenerate !== false) this.regenerate();
 
     store.subscribe((evt) => this._onParam(evt));
     window.addEventListener('resize', () => this._onResize());
     this.clock = new THREE.Clock();
+  }
+
+  _makeSunLight(name) {
+    const light = new THREE.DirectionalLight(0xfff2dc, 0);
+    light.name = name;
+    light.castShadow = true;
+    light.shadow.bias = -0.0006;
+    light.shadow.normalBias = 2.2;          // chunky flat-shaded voxels
+    light.shadow.radius = 1;
+    return light;
   }
 
   // ---- generation ----
@@ -255,12 +267,21 @@ export class Scene {
   }
 
   _applyShadowBounds(opts) {
-    const r = opts.radius * 1.4;
-    const sc = this.sun.shadow.camera;
+    this._lastShadowOpts = opts;
+    this._applyShadowBoundsFor(this.sun, opts, this.store.get('shadows.primaryCoverage') ?? 1);
+    this._applyShadowBoundsFor(this.shadowSun, opts, this.store.get('shadows.secondaryCoverage') ?? 1);
+  }
+
+  _applyShadowBoundsFor(light, opts, coverage = 1) {
+    if (!light?.shadow?.camera || !opts) return;
+    const cover = THREE.MathUtils.clamp(Number(coverage) || 1, 0.25, 2);
+    const r = opts.radius * 1.4 * cover;
+    const sc = light.shadow.camera;
     sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r;
     sc.near = Math.max(50, 6000 - r - opts.maxHeight - 600);
     sc.far = 6000 + r + 600;
     sc.updateProjectionMatrix();
+    light.shadow.needsUpdate = true;
   }
 
   _swapGeneratedAssets(vol, islandMesh, sea, treeGroup, planted) {
@@ -350,17 +371,65 @@ export class Scene {
   }
 
   // ---- params ----
-  _sunDir() {
-    const el = THREE.MathUtils.degToRad(this.store.get('sun.elevationDeg'));
-    const az = THREE.MathUtils.degToRad(this.store.get('sun.azimuthDeg'));
+  _effectiveSun() {
+    const s = this._sunOverride || {};
+    return {
+      elevationDeg: s.elevationDeg ?? this.store.get('sun.elevationDeg'),
+      azimuthDeg: s.azimuthDeg ?? this.store.get('sun.azimuthDeg'),
+      intensity: s.intensity ?? this.store.get('sun.intensity'),
+    };
+  }
+
+  _sunDir(sun = this._effectiveSun()) {
+    const el = THREE.MathUtils.degToRad(sun.elevationDeg);
+    const az = THREE.MathUtils.degToRad(sun.azimuthDeg);
     const ce = Math.cos(el);
     return new THREE.Vector3(ce * Math.cos(az), Math.sin(el), ce * Math.sin(az)).normalize();
   }
 
+  _shadowLayerWeights() {
+    const s = this.store;
+    const primaryOn = !!s.get('shadows.primaryEnable');
+    const secondaryOn = !!s.get('shadows.secondaryEnable');
+    const mix = THREE.MathUtils.clamp(s.get('shadows.secondaryMix') ?? 0.22, 0, 1);
+    const mode = s.get('shadows.blendMode') | 0;
+    if (mode === 1) return { primary: primaryOn ? 1 : 0, secondary: secondaryOn ? mix : 0 };
+    if (primaryOn && secondaryOn) return { primary: 1 - mix, secondary: mix };
+    return { primary: primaryOn ? 1 : 0, secondary: secondaryOn ? 1 : 0 };
+  }
+
   _applyAll() {
     const s = this.store;
-    const dir = this._sunDir();
-    const intensity = s.get('sun.intensity');
+    this._applySunLighting();
+
+    this.transmittanceLUT.setAtmosphere({
+      rayleighMul: s.get('atmosphere.rayleighMul'),
+      mieBeta: s.get('atmosphere.mieBeta'),
+      ozoneMul: s.get('atmosphere.ozoneMul'),
+    });
+    this.skyViewLUT.setAtmosphere({
+      rayleighMul: s.get('atmosphere.rayleighMul'),
+      mieBeta: s.get('atmosphere.mieBeta'),
+      ozoneMul: s.get('atmosphere.ozoneMul'),
+    });
+    this.skyViewLUT.setMieG(s.get('atmosphere.mieG'));
+    this._applyPlanetR();
+
+    const hw = s.get('render.horizonWarp');
+    this.skyViewLUT.setHorizonWarp(hw);
+    this.backdrop.setHorizonWarp(hw);
+
+    this.renderer.toneMappingExposure = s.get('render.exposure');
+    this.camera.fov = s.get('render.fov');
+    this.camera.updateProjectionMatrix();
+    this.scene.fog.density = s.get('render.fogDensity');
+  }
+
+  _applySunLighting() {
+    const s = this.store;
+    const sun = this._effectiveSun();
+    const dir = this._sunDir(sun);
+    const intensity = sun.intensity;
     this.skyViewLUT.setSunDir(dir);
     this.skyViewLUT.setSunIntensity(intensity);
     this.backdrop.setSun({ direction: dir, intensity });
@@ -368,15 +437,24 @@ export class Scene {
     // The voxel island relights with the sky: warm + low-key at sunset,
     // bright + neutral at noon, warm-dark fill on the shaded side (never the
     // dead pale-blue wash). Drag the existing sun slider → island follows.
-    const elDeg = s.get('sun.elevationDeg');
+    const elDeg = sun.elevationDeg;
     const day = THREE.MathUtils.clamp((elDeg + 6) / 28, 0, 1);   // dusk→noon
     const day2 = day * day * (3 - 2 * day);
     const slider = THREE.MathUtils.clamp(intensity / 22, 0.45, 2.2);
 
-    this.sun.position.copy(dir).multiplyScalar(6000);
-    this.sun.target.position.set(0, 0, 0);
-    this.sun.color.set('#ff7a36').lerp(new THREE.Color('#fff3df'), day2);
-    this.sun.intensity = THREE.MathUtils.lerp(0.5, 3.1, day2) * slider;
+    const sunColor = new THREE.Color('#ff7a36').lerp(new THREE.Color('#fff3df'), day2);
+    const directIntensity = THREE.MathUtils.lerp(0.5, 3.1, day2) * slider;
+    const shadowWeights = this._shadowLayerWeights();
+    for (const light of this.sunLayers) {
+      light.position.copy(dir).multiplyScalar(6000);
+      light.target.position.set(0, 0, 0);
+      light.color.copy(sunColor);
+    }
+    this.sun.intensity = directIntensity * shadowWeights.primary;
+    this.shadowSun.intensity = directIntensity * shadowWeights.secondary;
+    const shadowsEnabled = s.get('shadows.enable') !== false;
+    this.sun.castShadow = shadowsEnabled && shadowWeights.primary > 0 && !!s.get('shadows.primaryEnable');
+    this.shadowSun.castShadow = shadowsEnabled && shadowWeights.secondary > 0 && !!s.get('shadows.secondaryEnable');
 
     // ---- faked GI: sky-tinted hemisphere bounce (free, no extra pass) ----
     // Defaults reproduce the previous look; the new bit is the hemi colour
@@ -395,29 +473,6 @@ export class Scene {
     // the bounded sea dissolves EXACTLY into the sunset — no mismatched band.
     this.scene.fog.color.set('#d99250').lerp(new THREE.Color('#acc6cf'), day2);
     this._skyDirty = true;
-
-    const atmosphere = this._effectiveAtmosphere();
-    this.transmittanceLUT.setAtmosphere({
-      rayleighMul: atmosphere.rayleighMul,
-      mieBeta: atmosphere.mieBeta,
-      ozoneMul: atmosphere.ozoneMul,
-    });
-    this.skyViewLUT.setAtmosphere({
-      rayleighMul: atmosphere.rayleighMul,
-      mieBeta: atmosphere.mieBeta,
-      ozoneMul: atmosphere.ozoneMul,
-    });
-    this.skyViewLUT.setMieG(atmosphere.mieG);
-    this._applyPlanetR(atmosphere.planetRadiusKm);
-
-    const hw = s.get('render.horizonWarp');
-    this.skyViewLUT.setHorizonWarp(hw);
-    this.backdrop.setHorizonWarp(hw);
-
-    this.renderer.toneMappingExposure = s.get('render.exposure');
-    this.camera.fov = s.get('render.fov');
-    this.camera.updateProjectionMatrix();
-    this.scene.fog.density = s.get('render.fogDensity');
 
     this._applyWaterLighting();
   }
@@ -443,6 +498,10 @@ export class Scene {
         p === 'water.shoreGlowWidth' || p === 'water.shoreGlowFollow') {
       this._scheduleRegen();
     }
+    if (p === '*' || p.startsWith('shadows.')) {
+      this._applyShadowSettings();
+      this._applySunLighting();
+    }
     if (this.sea) {
       if (p === '*' || p === 'water.causticScale' || p === 'water.causticIntensity' || p === 'water.causticOpacity') {
         this.sea.setCaustic(
@@ -457,20 +516,9 @@ export class Scene {
     }
   }
 
-  _effectiveAtmosphere() {
-    const a = this._atmosphereOverride || {};
-    return {
-      rayleighMul: a.rayleighMul ?? this.store.get('atmosphere.rayleighMul'),
-      mieBeta: a.mieBeta ?? this.store.get('atmosphere.mieBeta'),
-      mieG: a.mieG ?? this.store.get('atmosphere.mieG'),
-      ozoneMul: a.ozoneMul ?? this.store.get('atmosphere.ozoneMul'),
-      planetRadiusKm: a.planetRadiusKm ?? this.store.get('atmosphere.planetRadiusKm'),
-    };
-  }
-
-  setAtmosphereOverride(values) {
-    this._atmosphereOverride = values || null;
-    this._applyAll();
+  setSunOverride(values) {
+    this._sunOverride = values || null;
+    this._applySunLighting();
   }
 
   _scheduleRegen() {
@@ -487,6 +535,38 @@ export class Scene {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.postfx?.setSize();
+  }
+
+  _applyShadowSettings() {
+    const s = this.store;
+    const nextType = SHADOW_FILTER_TYPES[THREE.MathUtils.clamp(s.get('shadows.filterMode') | 0, 0, 2)] || THREE.PCFSoftShadowMap;
+    const typeChanged = this.renderer.shadowMap.type !== nextType;
+    this.renderer.shadowMap.type = nextType;
+
+    this._applyShadowLightSettings(this.sun, s.get('shadows.primarySize') ?? 2048, typeChanged);
+    this._applyShadowLightSettings(this.shadowSun, s.get('shadows.secondarySize') ?? 512, typeChanged);
+    this._applyShadowBounds(this._lastShadowOpts || this._buildGenOptions(s));
+  }
+
+  _applyShadowLightSettings(light, rawSize, forceMapReset = false) {
+    if (!light?.shadow) return;
+    const maxSize = this.renderer.capabilities.maxTextureSize || 8192;
+    const size = THREE.MathUtils.clamp(Math.round((rawSize || 2048) / 512) * 512, 512, maxSize);
+    const shadow = light.shadow;
+    const sizeChanged = shadow.mapSize.x !== size || shadow.mapSize.y !== size;
+    shadow.mapSize.set(size, size);
+    shadow.bias = this.store.get('shadows.bias') ?? -0.0006;
+    shadow.normalBias = this.store.get('shadows.normalBias') ?? 2.2;
+    shadow.radius = this.store.get('shadows.softness') ?? 1;
+    if (sizeChanged || forceMapReset) this._disposeShadowMap(shadow);
+    shadow.needsUpdate = true;
+  }
+
+  _disposeShadowMap(shadow) {
+    if (shadow.map) {
+      shadow.map.dispose();
+      shadow.map = null;
+    }
   }
 
   // Compatibility shim for older smoke scripts. The UI owns this now via the
@@ -623,13 +703,14 @@ export class Scene {
   start() {
     const tick = () => {
       this._raf = requestAnimationFrame(tick);
-      const dt = Math.min(this.clock.getDelta(), 1 / 20);
+      const rawDt = Math.min(this.clock.getDelta(), 0.5);
+      const dt = Math.min(rawDt, 1 / 20);
       this.elapsed += dt;
       this.renderer.info.reset();
 
       this.camDirector.update(dt);
       this.autoCameraDirector.update(dt);
-      this.orbitSweep.update(dt);
+      this.orbitSweep.update(rawDt);
       this.sea?.update(this.elapsed, this.camera.position);
 
       this.camera.updateMatrixWorld();

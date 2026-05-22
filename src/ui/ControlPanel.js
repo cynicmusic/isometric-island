@@ -41,6 +41,7 @@ export class ControlPanel {
       <kbd>drag</kbd> look
       <kbd>H</kbd> panel
       <kbd>G</kbd> god rays
+      <kbd>X</kbd> shadows
       ${this.showWorkshopHint ? '<kbd>T</kbd> workshop' : ''}
       <kbd>F</kbd> fps
     `;
@@ -143,6 +144,10 @@ export class ControlPanel {
   }
 
   _buildSliderField(path, field) {
+    const curved = Number(field.curve) > 0 && field.type !== 'int';
+    const sliderMin = curved ? 0 : field.min;
+    const sliderMax = curved ? 1 : field.max;
+    const sliderStep = curved ? (field.uiStep ?? 0.001) : field.step;
     const row = document.createElement('div');
     row.className = 'ff-field';
     row.innerHTML = `
@@ -153,7 +158,7 @@ export class ControlPanel {
       <div class="ff-field-value"></div>
       <div class="ff-field-control">
         <div class="ff-slider">
-          <input type="range" min="${field.min}" max="${field.max}" step="${field.step}" />
+          <input type="range" min="${sliderMin}" max="${sliderMax}" step="${sliderStep}" />
         </div>
       </div>
     `;
@@ -161,24 +166,36 @@ export class ControlPanel {
     const slider = row.querySelector('.ff-slider');
     const input = row.querySelector('input');
     const formatter = makeFormatter(field);
+    const toSlider = (num) => {
+      if (!curved) return num;
+      const t = (Number(num) - field.min) / (field.max - field.min);
+      return Math.pow(Math.max(0, Math.min(1, t)), 1 / field.curve);
+    };
+    const fromSlider = (raw) => {
+      if (!curved) return Number(raw);
+      const t = Math.max(0, Math.min(1, Number(raw)));
+      return field.min + (field.max - field.min) * Math.pow(t, field.curve);
+    };
 
     const apply = (v) => {
       const num = Number(v);
-      input.value = String(num);
+      const sliderValue = toSlider(num);
+      input.value = String(sliderValue);
       valueEl.textContent = formatter(num);
-      const pct = ((num - field.min) / (field.max - field.min)) * 100;
+      const pct = curved ? sliderValue * 100 : ((num - field.min) / (field.max - field.min)) * 100;
       slider.style.setProperty('--ff-pct', `${pct.toFixed(2)}%`);
     };
 
     apply(this.store.get(path));
     input.addEventListener('input', () => {
-      const v = field.type === 'int' ? Math.round(Number(input.value)) : Number(input.value);
+      const raw = fromSlider(input.value);
+      const v = field.type === 'int' ? Math.round(raw) : raw;
       this.store.set(path, v);
       apply(v);
     });
     this._releaseRangeFocus(input);
 
-    this._attachSticky(row, path);
+    this._attachSticky(row, path, field);
     this.fieldUpdaters.set(path, apply);
     return row;
   }
@@ -193,7 +210,7 @@ export class ControlPanel {
       </div>
       <div class="ff-field-value"></div>
       <div class="ff-field-control">
-        <div class="ff-range">
+        <div class="ff-range${field.handle === 'ticks' ? ' ff-range-ticks' : ''}">
           <div class="ff-range-track"><div class="ff-range-fill"></div></div>
           <input type="range" min="${field.min}" max="${field.max}" step="${field.step}" />
           <input type="range" min="${field.min}" max="${field.max}" step="${field.step}" />
@@ -240,7 +257,7 @@ export class ControlPanel {
     this._releaseRangeFocus(inMin);
     this._releaseRangeFocus(inMax);
 
-    this._attachSticky(row, path);
+    this._attachSticky(row, path, field);
     this.fieldUpdaters.set(path, apply);
     return row;
   }
@@ -276,7 +293,7 @@ export class ControlPanel {
       this.store.set(path, next);
       apply(next);
     });
-    this._attachSticky(row, path);
+    this._attachSticky(row, path, field);
     this.fieldUpdaters.set(path, apply);
     return row;
   }
@@ -324,21 +341,6 @@ export class ControlPanel {
     }
     footer.appendChild(grid);
 
-    // default · random · baseline. "baseline" is the safety net: kill post
-    // FX + snap back to the golden A1 preset.
-    const trio = document.createElement('div');
-    trio.className = 'ff-btn-trio';
-    trio.innerHTML = `
-      <button class="ff-btn ff-mini" data-action="default">default</button>
-      <button class="ff-btn ff-mini" data-action="random">random</button>
-      <button class="ff-btn ff-mini" data-action="baseline" title="post FX off + snap to golden A1">baseline</button>
-    `;
-    footer.appendChild(trio);
-
-    trio.querySelectorAll('button[data-action]').forEach((btn) => {
-      btn.addEventListener('click', () => this.onAction(btn.dataset.action));
-    });
-
     this.root.appendChild(footer);
     this.refreshPresets();
   }
@@ -366,7 +368,8 @@ export class ControlPanel {
 
   // ◇ before the field name → ◆ when pinned. Structural params (voxel.*)
   // get the amber "major" pin; everything else the lime roll-friendly pin.
-  _attachSticky(row, path) {
+  _attachSticky(row, path, field = {}) {
+    if (field.pin === false) return;
     const label = row.querySelector('.ff-field-name');
     if (!label) return;
     const major = path.startsWith('voxel.');
@@ -404,8 +407,11 @@ export class ControlPanel {
 
 function makeFormatter(field) {
   const isInt = field.type === 'int';
-  const decimals = field.step >= 1 ? 0 : field.step >= 0.1 ? 1 : field.step >= 0.01 ? 2 : field.step >= 0.001 ? 3 : 4;
+  const decimals = Number.isInteger(field.precision)
+    ? field.precision
+    : field.step >= 1 ? 0 : field.step >= 0.1 ? 1 : field.step >= 0.01 ? 2 : field.step >= 0.001 ? 3 : 4;
   return (v) => {
+    if (field.labels && field.labels[v | 0] !== undefined) return field.labels[v | 0];
     const formatted = isInt ? String(v | 0) : Number(v).toFixed(decimals);
     return field.unit ? `${formatted} ${field.unit}` : formatted;
   };

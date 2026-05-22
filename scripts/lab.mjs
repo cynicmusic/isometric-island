@@ -2,7 +2,7 @@
 // Boots /lab/ against the real local preset file (read-only from the page),
 // mutates sun/camera/god-ray params, captures 40 PNGs, and writes a manifest.
 
-import { chromium } from '../../fire-whisp/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs/promises';

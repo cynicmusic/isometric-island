@@ -52,7 +52,7 @@ html, body {
   border-radius: 6px;
   background: rgba(5, 10, 13, 0.36);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  color: rgba(255, 229, 195, 0.56);
+  color: rgba(255, 238, 212, 0.9);
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.35;
@@ -72,18 +72,18 @@ html, body {
 .iso-build-console.transition {
   width: min(360px, calc(100vw - 28px));
   padding: 5px 8px 6px;
-  background: rgba(5, 10, 13, 0.32);
+  background: rgba(5, 10, 13, 0.62);
 }
 .iso-build-console.visible {
-  opacity: 0.48;
+  opacity: 1;
   transform: translateY(0);
 }
 .iso-build-console.active {
-  opacity: 0.72;
-  background: rgba(5, 10, 13, 0.46);
+  opacity: 1;
+  background: rgba(5, 10, 13, 0.72);
 }
-.iso-build-console.boot.visible { opacity: 0.78; }
-.iso-build-console.boot.active { opacity: 0.9; background: rgba(5, 10, 13, 0.64); }
+.iso-build-console.boot.visible { opacity: 1; }
+.iso-build-console.boot.active { opacity: 1; background: rgba(5, 10, 13, 0.74); }
 .iso-build-console.transition .iso-build-lines { display: none; }
 .iso-build-console.transition .iso-build-track { margin-bottom: 0; }
 .iso-build-row {
@@ -95,7 +95,7 @@ html, body {
 }
 .iso-build-spin {
   display: inline-block;
-  color: rgba(255, 138, 58, 0.82);
+  color: rgba(255, 157, 77, 1);
   text-align: center;
 }
 .iso-build-title {
@@ -105,7 +105,7 @@ html, body {
   white-space: nowrap;
   text-transform: uppercase;
 }
-.iso-build-time { color: rgba(255, 255, 255, 0.42); }
+.iso-build-time { color: rgba(255, 245, 225, 0.74); }
 .iso-build-track {
   height: 2px;
   margin: 5px 0 4px;
@@ -118,13 +118,14 @@ html, body {
   width: 100%;
   height: 100%;
   transform-origin: left center;
-  background: linear-gradient(90deg, rgba(255, 138, 58, 0.74), rgba(47, 217, 200, 0.62));
+  background: linear-gradient(90deg, rgba(255, 149, 62, 1), rgba(77, 245, 226, 0.96));
+  box-shadow: 0 0 8px rgba(255, 138, 58, 0.34);
 }
 .iso-build-lines {
   min-height: 42px;
   white-space: pre;
   overflow: hidden;
-  color: rgba(218, 236, 226, 0.46);
+  color: rgba(230, 247, 240, 0.72);
 }
 
 .iso-godray-workshop {

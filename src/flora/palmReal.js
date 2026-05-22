@@ -217,6 +217,7 @@ function build(p, rng) {
   const crownMesh = bC.finish('PalmCrown', true);
   if (trunkMesh) group.add(trunkMesh);
   if (crownMesh) { crownMesh.position.copy(crown); group.add(crownMesh); }
+
   group.userData.sway = { amp: p.swayAmp, speed: p.swaySpeed, phase: rng() * 6.28, crown: crownMesh };
   group.name = 'Palm';
   return group;

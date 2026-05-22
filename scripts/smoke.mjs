@@ -8,7 +8,7 @@
 // presets.json / sticky.json are never even opened. Set URL to point at an
 // external server and skip the spawn (e.g. CI against a static build).
 
-import { chromium } from '../../fire-whisp/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';

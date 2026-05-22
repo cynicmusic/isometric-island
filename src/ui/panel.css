@@ -345,6 +345,18 @@
   background: linear-gradient(135deg, #6fe0d2, #2fd9c8);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 0 10px rgba(47, 217, 200, 0.45);
 }
+.ff-range.ff-range-ticks input[type="range"]::-webkit-slider-thumb {
+  width: 5px;
+  height: 18px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #ffd19a, #ff8a3a);
+  border: 1px solid rgba(255, 225, 190, 0.62);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 9px rgba(255, 138, 58, 0.45);
+}
+.ff-range.ff-range-ticks input[type="range"]:nth-child(2)::-webkit-slider-thumb {
+  background: linear-gradient(180deg, #ffd19a, #ff8a3a);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 9px rgba(255, 138, 58, 0.45);
+}
 .ff-range input[type="range"]::-moz-range-thumb {
   pointer-events: auto;
   width: 14px; height: 14px;
@@ -352,6 +364,14 @@
   background: linear-gradient(135deg, #ffb070, #ff8a3a);
   border: 1px solid rgba(255, 220, 200, 0.35);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 0 10px var(--accent-glow);
+}
+.ff-range.ff-range-ticks input[type="range"]::-moz-range-thumb {
+  width: 5px;
+  height: 18px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #ffd19a, #ff8a3a);
+  border: 1px solid rgba(255, 225, 190, 0.62);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 9px rgba(255, 138, 58, 0.45);
 }
 
 /* ---- Toggle ---- */

@@ -2,7 +2,7 @@
 // Captures individual PNGs plus a contact sheet. Lab/workshop save remains
 // disabled, so this reads presets.json but does not write it.
 
-import { chromium } from '../../fire-whisp/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs/promises';

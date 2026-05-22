@@ -279,6 +279,12 @@ window.addEventListener('keydown', (event) => {
     if (controlsOpen) workshopHud.setCollapsed(!next);
     panel.flashStatus(next ? 'god rays on' : 'god rays off', 'ok');
   }
+  else if (k === 'x') {
+    event.preventDefault(); blur();
+    const next = !store.get('shadows.enable');
+    store.set('shadows.enable', next);
+    panel.flashStatus(next ? 'shadows on' : 'shadows off', 'ok');
+  }
   else if (k === 'escape') {
     event.preventDefault(); blur();
     if (!panel.collapsed) panel.toggle();
